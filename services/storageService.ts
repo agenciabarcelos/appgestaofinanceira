@@ -17,10 +17,18 @@ export const storageService = {
   },
 
   async signUp(email: string, password: string, name: string) {
+    // O desenvolvedor é auto-aprovado, novos usuários ficam pendentes
+    const isDeveloper = email.toLowerCase() === 'contato@agenciabarcelos.com.br';
+    
     const { data, error } = await supabase.auth.signUp({ 
       email, 
       password,
-      options: { data: { name } }
+      options: { 
+        data: { 
+          name,
+          approved: isDeveloper 
+        } 
+      }
     });
     if (error) throw error;
     return data.user;
@@ -50,13 +58,11 @@ export const storageService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
 
-    // Limpeza de dados para evitar erros de tipo UUID
     const cleanData = { ...transaction };
     if (!cleanData.id) delete cleanData.id;
     if (!cleanData.recurrenceId) delete cleanData.recurrenceId;
 
     if (transaction.id && transaction.id.trim() !== "") {
-      // Atualização
       const { data, error } = await supabase
         .from('transactions')
         .update(cleanData)
@@ -66,7 +72,6 @@ export const storageService = {
       if (error) throw error;
       return data[0];
     } else {
-      // Inserção
       const { data, error } = await supabase
         .from('transactions')
         .insert({ ...cleanData, user_id: user.id })
