@@ -23,10 +23,6 @@ export const storageService = {
       options: { data: { name } }
     });
     if (error) throw error;
-    
-    // Also create a profile record for access management (used by AdminApproval)
-    await supabase.from('profiles').insert({ email, name, approved: false });
-    
     return data.user;
   },
 
@@ -37,30 +33,6 @@ export const storageService = {
   async getCurrentUser() {
     const { data: { user } } = await supabase.auth.getUser();
     return user;
-  },
-
-  // --- ACCESS CONTROL (Admin) ---
-  // Fixes: Property 'getAllAccessRequests' does not exist on storageService
-  async getAllAccessRequests() {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return data || [];
-  },
-
-  // Fixes: Property 'updateApproval' does not exist on storageService
-  async updateApproval(email: string, approved: boolean) {
-    const { data, error } = await supabase
-      .from('profiles')
-      .update({ approved })
-      .eq('email', email)
-      .select();
-    
-    if (error) throw error;
-    return data ? data[0] : null;
   },
 
   // --- TRANSACTIONS ---
@@ -127,7 +99,13 @@ export const storageService = {
       .select('*');
     
     if (error) throw error;
-    return data && data.length > 0 ? (data as Category[]) : INITIAL_CATEGORIES;
+    
+    // Se não houver categorias no banco, usamos as iniciais
+    if (!data || data.length === 0) {
+      return INITIAL_CATEGORIES;
+    }
+
+    return data as Category[];
   },
 
   async saveCategory(category: Partial<Category>) {
@@ -137,7 +115,7 @@ export const storageService = {
     const cleanData = { ...category };
     if (!cleanData.id) delete cleanData.id;
 
-    if (category.id && category.id.trim() !== "") {
+    if (category.id && category.id.trim() !== "" && !category.id.startsWith('exp-') && !category.id.startsWith('inc-')) {
       const { data, error } = await supabase
         .from('categories')
         .update(cleanData)
@@ -162,5 +140,29 @@ export const storageService = {
       .eq('id', id);
     
     if (error) throw error;
+  },
+
+  // --- ACCESS REQUESTS ---
+  // Fixes: Property 'getAllAccessRequests' does not exist on type...
+  async getAllAccessRequests() {
+    const { data, error } = await supabase
+      .from('access_requests')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Fixes: Property 'updateApproval' does not exist on type...
+  async updateApproval(email: string, approved: boolean) {
+    const { data, error } = await supabase
+      .from('access_requests')
+      .update({ approved })
+      .eq('email', email)
+      .select();
+    
+    if (error) throw error;
+    return data ? data[0] : null;
   }
 };
