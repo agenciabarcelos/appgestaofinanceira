@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Transaction, TransactionType, TransactionStatus, Category, RecurrenceType } from '../types';
-import { Plus, Search, Trash2, Edit2, ChevronLeft, ChevronRight, Repeat, ChevronDown, AlertTriangle, X } from 'lucide-react';
+import { Plus, Search, Trash2, Edit2, ChevronLeft, ChevronRight, Repeat, ChevronDown, AlertTriangle, X, CalendarDays, Layers } from 'lucide-react';
 import { MONTHS, RECURRENCE_LABELS } from '../constants';
 import { Icon } from './ui/Icons';
 
@@ -43,7 +43,6 @@ const Transactions: React.FC<TransactionsProps> = ({
     installmentsCount: 1,
   });
 
-  // CORREÇÃO CRÍTICA: Sempre que o tipo mudar no form, garante que a categoria também mude para uma válida
   useEffect(() => {
     const currentCategory = categories.find(c => c.id === formData.categoryId);
     if (!currentCategory || currentCategory.type !== formData.type) {
@@ -158,7 +157,7 @@ const Transactions: React.FC<TransactionsProps> = ({
             onClick={() => openModal()}
             className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2 rounded-xl hover:bg-black transition-all shadow-lg active:scale-95 text-xs font-black uppercase tracking-widest"
           >
-            <Plus size={18} /> Novo
+            <Plus size={18} /> Novo Lançamento
           </button>
         </div>
       </div>
@@ -169,7 +168,7 @@ const Transactions: React.FC<TransactionsProps> = ({
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição</th>
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
+                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vencimento</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
@@ -179,7 +178,7 @@ const Transactions: React.FC<TransactionsProps> = ({
             <tbody className="divide-y divide-slate-50">
               {filteredTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">Nenhum lançamento neste período.</td>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic">Nenhum lançamento encontrado para este período.</td>
                 </tr>
               ) : (
                 filteredTransactions.map((t) => (
@@ -189,7 +188,11 @@ const Transactions: React.FC<TransactionsProps> = ({
                         <div className={`w-2.5 h-2.5 rounded-full ${t.type === TransactionType.PAYABLE ? 'bg-rose-500 shadow-lg shadow-rose-500/30' : 'bg-emerald-500 shadow-lg shadow-emerald-500/30'}`}></div>
                         <div>
                           <p className="font-bold text-slate-800">{t.description}</p>
-                          {t.recurrenceId && <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Parcela {t.installment}/{t.totalInstallments}</span>}
+                          {t.recurrenceId && (
+                            <div className="flex items-center gap-1 text-[9px] font-black text-blue-500 uppercase tracking-tighter">
+                              <Repeat size={10} /> Parcela {t.installment}/{t.totalInstallments}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -228,7 +231,18 @@ const Transactions: React.FC<TransactionsProps> = ({
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => openModal(t)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Edit2 size={14} /></button>
-                        <button onClick={() => { if(t.recurrenceId) setDeletingTransaction(t); else if(window.confirm('Excluir?')) onDelete(t.id); }} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={14} /></button>
+                        <button 
+                          onClick={() => {
+                            if(t.recurrenceId) {
+                              setDeletingTransaction(t);
+                            } else if(window.confirm('Deseja realmente excluir este lançamento?')) {
+                              onDelete(t.id);
+                            }
+                          }} 
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -239,55 +253,58 @@ const Transactions: React.FC<TransactionsProps> = ({
         </div>
       </div>
 
+      {/* MODAL DE ADIÇÃO/EDIÇÃO */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in duration-300">
             <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">{editingId ? 'Editar Lançamento' : 'Novo Lançamento'}</h2>
+              <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">
+                {editingId ? 'Editar Registro' : 'Novo Lançamento'}
+              </h2>
               <button onClick={closeModal} className="text-slate-400 hover:bg-white p-2 rounded-full transition-all">
                 <X size={20} />
               </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-8 space-y-6">
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Tipo de Operação</label>
+            <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
+              <div className="space-y-4">
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Fluxo de Caixa</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setFormData({...formData, type: TransactionType.PAYABLE})}
-                    className={`py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all border-2 ${formData.type === TransactionType.PAYABLE ? 'bg-rose-50 border-rose-500 text-rose-600' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                    className={`py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all border-2 flex flex-col items-center gap-1 ${formData.type === TransactionType.PAYABLE ? 'bg-rose-50 border-rose-500 text-rose-600' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
                   >
-                    Despesa (A Pagar)
+                    Despesa (Saída)
                   </button>
                   <button
                     type="button"
                     onClick={() => setFormData({...formData, type: TransactionType.RECEIVABLE})}
-                    className={`py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all border-2 ${formData.type === TransactionType.RECEIVABLE ? 'bg-emerald-50 border-emerald-500 text-emerald-600' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                    className={`py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all border-2 flex flex-col items-center gap-1 ${formData.type === TransactionType.RECEIVABLE ? 'bg-emerald-50 border-emerald-500 text-emerald-600' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
                   >
-                    Receita (A Receber)
+                    Receita (Entrada)
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Descrição</label>
-                  <input required type="text" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-700" placeholder="Ex: Mercado Mensal" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Descrição do Lançamento</label>
+                  <input required type="text" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none font-bold text-slate-700" placeholder="Ex: Supermercado, Aluguel, Salário..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Valor (R$)</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Valor {formData.installmentsCount > 1 ? 'Total' : ''} (R$)</label>
                   <input required type="number" step="0.01" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-800 text-lg" placeholder="0,00" value={formData.amount} onChange={e => setFormData({...formData, amount: parseFloat(e.target.value)})} />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Data Vencimento</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Data de Vencimento</label>
                   <input required type="date" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700" value={formData.dueDate} onChange={e => setFormData({...formData, dueDate: e.target.value})} />
                 </div>
 
-                <div className="col-span-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Categoria (Ajustada p/ {formData.type === TransactionType.PAYABLE ? 'Despesa' : 'Receita'})</label>
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Categoria</label>
                   <div className="relative">
                     <select 
                       required
@@ -304,11 +321,102 @@ const Transactions: React.FC<TransactionsProps> = ({
                 </div>
               </div>
 
+              {/* SEÇÃO DE REPETIÇÃO - APENAS PARA NOVOS LANÇAMENTOS */}
+              {!editingId && (
+                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-6">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Layers size={16} className="text-blue-500" />
+                    <h3 className="text-xs font-black text-slate-700 uppercase tracking-widest">Repetição e Planejamento</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Recorrência</label>
+                      <div className="relative">
+                        <select 
+                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl outline-none font-bold text-slate-600 appearance-none cursor-pointer text-sm"
+                          value={formData.recurrence}
+                          onChange={e => setFormData({...formData, recurrence: e.target.value as RecurrenceType})}
+                        >
+                          <option value={RecurrenceType.NONE}>Nenhuma</option>
+                          <option value={RecurrenceType.MONTHLY}>Mensal</option>
+                          <option value={RecurrenceType.QUARTERLY}>Trimestral</option>
+                          <option value={RecurrenceType.SEMIANNUAL}>Semestral</option>
+                          <option value={RecurrenceType.ANNUAL}>Anual</option>
+                        </select>
+                        <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Parcelamento (1x até 12x)</label>
+                      <div className="relative">
+                        <select 
+                          className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl outline-none font-bold text-slate-600 appearance-none cursor-pointer text-sm"
+                          value={formData.installmentsCount}
+                          onChange={e => setFormData({...formData, installmentsCount: parseInt(e.target.value)})}
+                        >
+                          {[1,2,3,4,5,6,7,8,9,10,11,12].map(num => (
+                            <option key={num} value={num}>{num}x {num > 1 ? `(Parcelado)` : '(À vista)'}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400" />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {formData.installmentsCount > 1 && (
+                    <div className="flex items-center gap-2 text-blue-600 bg-blue-50 p-3 rounded-xl border border-blue-100">
+                      <AlertTriangle size={14} className="shrink-0" />
+                      <p className="text-[10px] font-bold uppercase leading-tight">
+                        O valor total de {formatCurrency(formData.amount)} será dividido em {formData.installmentsCount} parcelas de {formatCurrency(formData.amount / formData.installmentsCount)}.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="pt-4 flex gap-3">
-                <button type="button" onClick={closeModal} className="flex-1 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Cancelar</button>
+                <button type="button" onClick={closeModal} className="flex-1 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">Cancelar</button>
                 <button type="submit" className="flex-[2] py-4 bg-slate-900 text-white text-xs font-black uppercase tracking-widest rounded-2xl hover:bg-black transition-all shadow-xl active:scale-95">Confirmar Lançamento</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE RECORRÊNCIA */}
+      {deletingTransaction && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-[2rem] p-8 max-w-sm w-full shadow-2xl animate-in zoom-in duration-200">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle size={32} />
+              </div>
+              <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-2">Excluir Lançamento</h3>
+              <p className="text-sm text-slate-500 mb-6 font-medium">Este lançamento faz parte de uma série (parcelamento). Como deseja prosseguir?</p>
+              
+              <div className="space-y-3">
+                <button 
+                  onClick={() => { onDelete(deletingTransaction.id); setDeletingTransaction(null); }}
+                  className="w-full py-3 bg-slate-100 text-slate-700 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-200 transition-all"
+                >
+                  Excluir apenas este
+                </button>
+                <button 
+                  onClick={() => { onDelete(deletingTransaction.id, true); setDeletingTransaction(null); }}
+                  className="w-full py-3 bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-rose-700 transition-all shadow-lg shadow-rose-600/20"
+                >
+                  Excluir toda a série
+                </button>
+                <button 
+                  onClick={() => setDeletingTransaction(null)}
+                  className="w-full py-3 text-slate-400 text-[10px] font-black uppercase tracking-widest"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

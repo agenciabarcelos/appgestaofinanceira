@@ -111,27 +111,70 @@ const App: React.FC = () => {
   };
 
   const addTransaction = async (data: any) => {
+    const { installmentsCount, recurrence, amount, description, ...baseData } = data;
     try {
-      if (data.installmentsCount > 1) {
-        const amountPerParcel = data.amount / data.installmentsCount;
+      setLoading(true);
+      
+      // CASO 1: PARCELAMENTO (DIVISÃO DO VALOR TOTAL)
+      if (installmentsCount > 1) {
+        const amountPerParcel = amount / installmentsCount;
         const baseId = crypto.randomUUID();
         const startDate = new Date(data.dueDate);
         const promises = [];
-        for (let i = 0; i < data.installmentsCount; i++) {
+        
+        for (let i = 0; i < installmentsCount; i++) {
           const d = new Date(startDate);
           d.setMonth(d.getMonth() + i);
           promises.push(storageService.saveTransaction({
-            ...data, amount: amountPerParcel, dueDate: d.toISOString().split('T')[0],
-            recurrenceId: baseId, installment: i + 1, totalInstallments: data.installmentsCount
+            ...baseData,
+            description: `${description} (${i + 1}/${installmentsCount})`,
+            amount: amountPerParcel, 
+            dueDate: d.toISOString().split('T')[0],
+            recurrenceId: baseId, 
+            installment: i + 1, 
+            totalInstallments: installmentsCount
           }));
         }
         await Promise.all(promises);
-      } else {
-        await storageService.saveTransaction(data);
+      } 
+      // CASO 2: RECORRÊNCIA (REPETIÇÃO DO VALOR INTEGRAL)
+      else if (recurrence !== RecurrenceType.NONE) {
+        let monthsStep = 1;
+        let count = 12; // Padrão: criar para o próximo 1 ano
+
+        if (recurrence === RecurrenceType.QUARTERLY) { monthsStep = 3; count = 4; }
+        else if (recurrence === RecurrenceType.SEMIANNUAL) { monthsStep = 6; count = 2; }
+        else if (recurrence === RecurrenceType.ANNUAL) { monthsStep = 12; count = 2; }
+
+        const baseId = crypto.randomUUID();
+        const startDate = new Date(data.dueDate);
+        const promises = [];
+        
+        for (let i = 0; i < count; i++) {
+          const d = new Date(startDate);
+          d.setMonth(d.getMonth() + (i * monthsStep));
+          promises.push(storageService.saveTransaction({
+            ...baseData,
+            description: description,
+            amount: amount, 
+            dueDate: d.toISOString().split('T')[0],
+            recurrenceId: baseId, 
+            installment: i + 1, 
+            totalInstallments: count
+          }));
+        }
+        await Promise.all(promises);
+      } 
+      // CASO 3: LANÇAMENTO ÚNICO
+      else {
+        await storageService.saveTransaction({ ...baseData, description, amount });
       }
+      
       await fetchData();
     } catch (e: any) {
-      alert("Erro: " + e.message);
+      alert("Erro ao salvar: " + e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -148,7 +191,9 @@ const App: React.FC = () => {
     try {
       if (deleteAllRecurrence) {
         const t = transactions.find(x => x.id === id);
-        if (t?.recurrenceId) await storageService.deleteTransactionsByRecurrence(t.recurrenceId);
+        if (t?.recurrenceId) {
+          await storageService.deleteTransactionsByRecurrence(t.recurrenceId);
+        }
       } else {
         await storageService.deleteTransaction(id);
       }
@@ -167,7 +212,12 @@ const App: React.FC = () => {
   }, [transactions]);
 
   if (loading && !user) {
-    return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><Loader2 className="text-blue-500 animate-spin" size={48} /></div>;
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
+        <Loader2 className="text-blue-500 animate-spin mb-4" size={48} />
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Sincronizando Banco de Dados...</p>
+      </div>
+    );
   }
 
   if (!user) {
@@ -209,7 +259,12 @@ const App: React.FC = () => {
           <button onClick={handleLogout} className="w-full flex items-center gap-2 text-rose-500 hover:text-rose-400 font-black uppercase text-[10px] tracking-widest p-2 transition-all"><LogOut size={16} /> Encerrar Sessão</button>
         </div>
       </aside>
-      <main className="flex-1 p-6 md:p-10">
+      <main className="flex-1 p-6 md:p-10 relative">
+        {loading && (
+          <div className="absolute top-0 left-0 right-0 h-1 bg-blue-600/20 z-50">
+            <div className="h-full bg-blue-600 animate-pulse"></div>
+          </div>
+        )}
         <header className="mb-8">
           <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">
             {activeTab === 'DASHBOARD' && 'Dashboard'}
@@ -217,7 +272,7 @@ const App: React.FC = () => {
             {activeTab === 'CATEGORIES' && 'Categorias'}
             {activeTab === 'REPORTS' && 'Relatórios'}
           </h1>
-          <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">Conectado como {user.name}</p>
+          <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">Olá, {user.name}. Bem-vindo ao seu painel financeiro.</p>
         </header>
         {activeTab === 'DASHBOARD' && <Dashboard transactions={processedTransactions} categories={categories} currentMonth={currentMonth} currentYear={currentYear} />}
         {activeTab === 'TRANSACTIONS' && <Transactions transactions={processedTransactions} categories={categories} currentMonth={currentMonth} currentYear={currentYear} onAdd={addTransaction} onEdit={updateTransaction} onDelete={deleteTransaction} onNavigate={(m, y) => { setCurrentMonth(m); setCurrentYear(y); }} />}
@@ -229,7 +284,7 @@ const App: React.FC = () => {
 };
 
 const SidebarItem = ({ icon, label, active, onClick }: any) => (
-  <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-bold transition-all ${active ? 'bg-blue-600 text-white shadow-xl' : 'text-slate-500 hover:bg-white/5 hover:text-slate-100'}`}>{icon} {label}</button>
+  <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-bold transition-all ${active ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/20' : 'text-slate-500 hover:bg-white/5 hover:text-slate-100'}`}>{icon} {label}</button>
 );
 
 export default App;
