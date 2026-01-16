@@ -125,7 +125,6 @@ const App: React.FC = () => {
     const { recurrence, status, installmentsCount = 1, amount, ...baseData } = data;
     
     try {
-      // Caso 1: Lançamento em parcelas (Dividindo o valor total)
       if (installmentsCount > 1) {
         const amountPerParcel = amount / installmentsCount;
         const baseId = crypto.randomUUID();
@@ -150,7 +149,6 @@ const App: React.FC = () => {
         return;
       }
 
-      // Caso 2: Recorrência fixa (Repetindo o valor original)
       if (recurrence !== RecurrenceType.NONE) {
         let installments = 1, monthsToAdd = 0;
         switch (recurrence) {
@@ -181,7 +179,6 @@ const App: React.FC = () => {
         return;
       }
 
-      // Caso 3: Lançamento Único (À Vista)
       const newT = await storageService.saveTransaction({ 
         ...baseData, 
         amount: amount,
@@ -276,26 +273,26 @@ const App: React.FC = () => {
         <div className="absolute top-0 -left-4 w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-[120px] opacity-20 animate-pulse"></div>
         <div className="absolute bottom-0 -right-4 w-96 h-96 bg-emerald-600 rounded-full mix-blend-multiply filter blur-[120px] opacity-20 animate-pulse animation-delay-2000"></div>
 
-        <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-8 rounded-[2.5rem] shadow-2xl w-full max-md z-10">
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center p-5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl shadow-xl shadow-blue-500/20 mb-6">
-              <ShieldCheck size={42} className="text-white" />
+        <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-6 md:p-10 rounded-[2.5rem] shadow-2xl w-full max-w-[400px] z-10 transition-all">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center p-4 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-xl shadow-blue-500/20 mb-5">
+              <ShieldCheck size={32} className="text-white" />
             </div>
-            <h1 className="text-3xl font-black text-white mb-2 tracking-tight">Gestão Financeira</h1>
-            <p className="text-slate-400 text-sm font-medium">
-              {isRegistering ? 'Crie sua conta no Supabase Cloud' : 'Autenticação Segura via Supabase'}
+            <h1 className="text-2xl font-black text-white mb-2 tracking-tight">Gestão Financeira</h1>
+            <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest">
+              {isRegistering ? 'Criar Conta Cloud' : 'Autenticação de Acesso'}
             </p>
           </div>
 
-          <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-5">
+          <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
             {isRegistering && (
               <div className="relative group">
-                <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={20} />
+                <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
                 <input 
                   required
                   type="text" 
                   placeholder="Seu Nome"
-                  className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white/10 transition-all"
+                  className="w-full pl-11 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white/10 transition-all text-sm"
                   value={authForm.name}
                   onChange={e => setAuthForm({ ...authForm, name: e.target.value })}
                 />
@@ -303,31 +300,31 @@ const App: React.FC = () => {
             )}
             
             <div className="relative group">
-              <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={20} />
+              <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
               <input 
                 required
                 type="email" 
                 placeholder="E-mail"
-                className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white/10 transition-all"
+                className="w-full pl-11 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white/10 transition-all text-sm"
                 value={authForm.email}
                 onChange={e => setAuthForm({ ...authForm, email: e.target.value })}
               />
             </div>
 
             <div className="relative group">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={20} />
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />
               <input 
                 required
                 type="password" 
                 placeholder="Senha"
-                className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white/10 transition-all"
+                className="w-full pl-11 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white/10 transition-all text-sm"
                 value={authForm.password}
                 onChange={e => setAuthForm({ ...authForm, password: e.target.value })}
               />
             </div>
 
             {authError && (
-              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs py-3 px-4 rounded-xl text-center font-semibold">
+              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[10px] py-2.5 px-4 rounded-xl text-center font-bold uppercase">
                 {authError}
               </div>
             )}
@@ -335,16 +332,16 @@ const App: React.FC = () => {
             <button 
               type="submit"
               disabled={authLoading}
-              className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black rounded-2xl hover:brightness-110 transition-all shadow-xl shadow-blue-600/20 active:scale-[0.98] uppercase tracking-wider text-sm flex items-center justify-center gap-2"
+              className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black rounded-xl hover:brightness-110 transition-all shadow-xl shadow-blue-600/20 active:scale-[0.98] uppercase tracking-wider text-xs flex items-center justify-center gap-2"
             >
-              {authLoading ? <Loader2 className="animate-spin" size={20} /> : (isRegistering ? 'Cadastrar Agora' : 'Acessar Painel')}
+              {authLoading ? <Loader2 className="animate-spin" size={18} /> : (isRegistering ? 'Cadastrar Agora' : 'Acessar Painel')}
             </button>
           </form>
 
-          <div className="mt-8 text-center">
+          <div className="mt-8 text-center border-t border-white/5 pt-6">
             <button 
               onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); }}
-              className="text-slate-400 hover:text-blue-400 text-xs font-bold transition-colors uppercase tracking-widest"
+              className="text-slate-500 hover:text-blue-400 text-[10px] font-black transition-colors uppercase tracking-[0.15em]"
             >
               {isRegistering ? 'Voltar para o Login' : 'Novo por aqui? Criar Conta'}
             </button>
