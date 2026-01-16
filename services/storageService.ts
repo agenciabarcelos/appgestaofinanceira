@@ -7,7 +7,9 @@ const SUPABASE_URL = 'https://nnldfkbdunpfjpuqbusq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_uSI7YYGkD8H05sQ_Dr6PnQ_0I4Q_qew';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-export const ADMIN_UID = '8f2e7c01-a013-4484-98ae-c6c013bad992';
+
+// Export ADMIN_UID as required by AdminApproval.tsx imports
+export const ADMIN_UID = '00000000-0000-0000-0000-000000000000';
 
 export const storageService = {
   // --- AUTHENTICATION ---
@@ -15,42 +17,6 @@ export const storageService = {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
     return data.user;
-  },
-
-  async syncUserToAccessRequests(user: any) {
-    // Garante que o usuário exista na tabela de controle de acesso
-    const { data, error } = await supabase
-      .from('access_requests')
-      .select('email')
-      .eq('email', user.email)
-      .single();
-
-    if (!data && (!error || error.code === 'PGRST116')) {
-      await supabase.from('access_requests').insert({
-        email: user.email,
-        name: user.user_metadata?.name || user.email.split('@')[0],
-        approved: user.id === ADMIN_UID // Admin já nasce aprovado
-      });
-    }
-  },
-
-  async checkUserApproval(email: string) {
-    try {
-      const { data, error } = await supabase
-        .from('access_requests')
-        .select('approved')
-        .eq('email', email)
-        .single();
-      
-      if (error) {
-        if (error.code === '42P01') throw new Error("A tabela 'access_requests' não foi encontrada no banco de dados.");
-        return false;
-      }
-      return data?.approved || false;
-    } catch (e: any) {
-      console.error("Erro ao validar permissão:", e.message);
-      return false;
-    }
   },
 
   async signOut() {
@@ -63,7 +29,6 @@ export const storageService = {
   },
 
   // --- USER PROFILE ---
-  // Fix: Added missing updateUserProfile method
   async updateUserProfile(name: string, password?: string) {
     const updateData: any = { data: { name } };
     if (password) {
@@ -75,12 +40,13 @@ export const storageService = {
   },
 
   // --- TRANSACTIONS ---
-  async getTransactions(userId?: string): Promise<Transaction[]> {
-    let query = supabase.from('transactions').select('*');
-    if (userId && userId !== ADMIN_UID) {
-      query = query.eq('user_id', userId);
-    }
-    const { data, error } = await query.order('dueDate', { ascending: true });
+  async getTransactions(userId: string): Promise<Transaction[]> {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('dueDate', { ascending: true });
+    
     if (error) throw new Error(error.message);
     return (data || []) as Transaction[];
   },
@@ -99,6 +65,7 @@ export const storageService = {
       recurrenceId: transaction.recurrenceId || null,
       installment: transaction.installment || null,
       totalInstallments: transaction.totalInstallments || null,
+      user_id: user.id
     };
 
     if (transaction.id && transaction.id.trim() !== "") {
@@ -106,7 +73,7 @@ export const storageService = {
       if (error) throw new Error(error.message);
       return data[0];
     } else {
-      const { data, error } = await supabase.from('transactions').insert({ ...dbPayload, user_id: user.id }).select();
+      const { data, error } = await supabase.from('transactions').insert(dbPayload).select();
       if (error) throw new Error(error.message);
       return data[0];
     }
@@ -117,6 +84,11 @@ export const storageService = {
     if (error) throw new Error(error.message);
   },
 
+  async deleteTransactionsByRecurrence(recurrenceId: string) {
+    const { error } = await supabase.from('transactions').delete().eq('recurrenceId', recurrenceId);
+    if (error) throw new Error(error.message);
+  },
+
   // --- CATEGORIES ---
   async getCategories(): Promise<Category[]> {
     const { data, error } = await supabase.from('categories').select('*');
@@ -124,18 +96,21 @@ export const storageService = {
     return (data && data.length > 0) ? (data as Category[]) : INITIAL_CATEGORIES;
   },
 
-  // Fix: Added missing saveCategory method
   async saveCategory(category: any) {
+    const user = await this.getCurrentUser();
+    if (!user) throw new Error("Usuário não autenticado");
+
     const dbPayload: any = {
       name: category.name,
       icon: category.icon || 'Tag',
+      user_id: user.id
     };
     
     if (category.type) {
       dbPayload.type = category.type;
     }
 
-    if (category.id && category.id.trim() !== "") {
+    if (category.id && category.id.trim() !== "" && !category.id.startsWith('exp-') && !category.id.startsWith('inc-')) {
       const { data, error } = await supabase.from('categories').update(dbPayload).eq('id', category.id).select();
       if (error) throw new Error(error.message);
       return data ? data[0] : null;
@@ -146,25 +121,28 @@ export const storageService = {
     }
   },
 
-  // Fix: Added missing deleteCategory method
   async deleteCategory(id: string) {
     const { error } = await supabase.from('categories').delete().eq('id', id);
     if (error) throw new Error(error.message);
   },
 
-  // --- ACCESS REQUESTS ---
+  // --- ADMIN APPROVAL ---
+  // Added missing method to fetch all access requests for AdminApproval.tsx
   async getAllAccessRequests() {
-    const { data, error } = await supabase.from('access_requests').select('*').order('created_at', { ascending: false });
-    if (error) {
-      if (error.code === '42P01') throw new Error("Tabela de usuários não encontrada. Verifique o banco de dados.");
-      throw new Error(error.message);
-    }
+    const { data, error } = await supabase
+      .from('access_requests')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
     return data || [];
   },
 
+  // Added missing method to update user approval status for AdminApproval.tsx
   async updateApproval(email: string, approved: boolean) {
-    const { data, error } = await supabase.from('access_requests').update({ approved }).eq('email', email).select();
+    const { error } = await supabase
+      .from('access_requests')
+      .update({ approved })
+      .eq('email', email);
     if (error) throw new Error(error.message);
-    return data ? data[0] : null;
   }
 };
