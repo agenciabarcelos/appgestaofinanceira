@@ -42,6 +42,7 @@ const Transactions: React.FC<TransactionsProps> = ({
     categoryId: '',
     recurrence: RecurrenceType.NONE,
     status: TransactionStatus.PENDING,
+    installmentsCount: 1, // Novo campo
   });
 
   // Atualiza o categoryId padrão quando as categorias carregarem
@@ -91,6 +92,7 @@ const Transactions: React.FC<TransactionsProps> = ({
         categoryId: transaction.categoryId,
         recurrence: RecurrenceType.NONE, 
         status: transaction.status,
+        installmentsCount: 1,
       });
     } else {
       setEditingId(null);
@@ -103,6 +105,7 @@ const Transactions: React.FC<TransactionsProps> = ({
         categoryId: defaultCategory,
         recurrence: RecurrenceType.NONE,
         status: TransactionStatus.PENDING,
+        installmentsCount: 1,
       });
     }
     setShowModal(true);
@@ -378,7 +381,7 @@ const Transactions: React.FC<TransactionsProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor (R$)</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Total (R$)</label>
                   <input 
                     required
                     type="number" 
@@ -391,7 +394,7 @@ const Transactions: React.FC<TransactionsProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Vencimento</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Vencimento da 1ª Parcela</label>
                   <input 
                     required
                     type="date" 
@@ -433,20 +436,46 @@ const Transactions: React.FC<TransactionsProps> = ({
                 </div>
 
                 {!editingId && (
-                  <div className="col-span-2">
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Recorrência (Gerar próximas parcelas)</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {Object.entries(RecurrenceType).map(([key, val]) => (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => setFormData({...formData, recurrence: val as RecurrenceType})}
-                          className={`py-2 rounded-xl text-[10px] font-bold transition-all border uppercase ${formData.recurrence === val ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-400'}`}
-                        >
-                          {RECURRENCE_LABELS[key]}
-                        </button>
-                      ))}
+                  <div className="col-span-2 space-y-4">
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Parcelamento (1 a 12x)</label>
+                        <span className="text-xs font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                          {formData.installmentsCount}x de {formatCurrency(formData.amount / formData.installmentsCount)}
+                        </span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="1" 
+                        max="12" 
+                        step="1"
+                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                        value={formData.installmentsCount}
+                        onChange={e => setFormData({...formData, installmentsCount: parseInt(e.target.value), recurrence: RecurrenceType.NONE})}
+                      />
+                      <div className="flex justify-between text-[10px] text-slate-400 font-bold mt-1">
+                        <span>À VISTA</span>
+                        <span>12 PARCELAS</span>
+                      </div>
                     </div>
+
+                    {formData.installmentsCount === 1 && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Ou Recorrência Fixa</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {Object.entries(RecurrenceType).map(([key, val]) => (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => setFormData({...formData, recurrence: val as RecurrenceType})}
+                              className={`py-2 rounded-xl text-[10px] font-bold transition-all border uppercase ${formData.recurrence === val ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-400'}`}
+                            >
+                              {RECURRENCE_LABELS[key]}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -463,7 +492,7 @@ const Transactions: React.FC<TransactionsProps> = ({
                   type="submit"
                   className="flex-[2] py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-lg active:scale-95"
                 >
-                  {editingId ? 'Salvar Alterações' : 'Criar Lançamento'}
+                  {editingId ? 'Salvar Alterações' : (formData.installmentsCount > 1 ? `Gerar ${formData.installmentsCount} Parcelas` : 'Criar Lançamento')}
                 </button>
               </div>
             </form>

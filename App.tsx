@@ -122,13 +122,36 @@ const App: React.FC = () => {
 
   const addTransaction = async (data: any) => {
     if (!user) return;
-    const { recurrence, status, ...baseData } = data;
+    const { recurrence, status, installmentsCount = 1, amount, ...baseData } = data;
     
     try {
-      if (recurrence === RecurrenceType.NONE) {
-        const newT = await storageService.saveTransaction({ ...baseData, status: status || TransactionStatus.PENDING });
-        setTransactions(prev => [...prev, newT]);
-      } else {
+      // Caso 1: Lançamento em parcelas (Dividindo o valor total)
+      if (installmentsCount > 1) {
+        const amountPerParcel = amount / installmentsCount;
+        const baseId = crypto.randomUUID();
+        const startDate = new Date(data.dueDate);
+        
+        const promises = [];
+        for (let i = 0; i < installmentsCount; i++) {
+          const d = new Date(startDate);
+          d.setMonth(d.getMonth() + i);
+          promises.push(storageService.saveTransaction({
+            ...baseData,
+            amount: amountPerParcel,
+            dueDate: d.toISOString().split('T')[0],
+            status: status || TransactionStatus.PENDING,
+            recurrenceId: baseId,
+            installment: i + 1,
+            totalInstallments: installmentsCount
+          }));
+        }
+        await Promise.all(promises);
+        await fetchData();
+        return;
+      }
+
+      // Caso 2: Recorrência fixa (Repetindo o valor original)
+      if (recurrence !== RecurrenceType.NONE) {
         let installments = 1, monthsToAdd = 0;
         switch (recurrence) {
           case RecurrenceType.MONTHLY: monthsToAdd = 1; installments = 12; break;
@@ -145,6 +168,7 @@ const App: React.FC = () => {
           d.setMonth(d.getMonth() + (i * monthsToAdd));
           promises.push(storageService.saveTransaction({
             ...baseData,
+            amount: amount,
             dueDate: d.toISOString().split('T')[0],
             status: status || TransactionStatus.PENDING,
             recurrenceId: baseId,
@@ -154,7 +178,17 @@ const App: React.FC = () => {
         }
         await Promise.all(promises);
         await fetchData();
+        return;
       }
+
+      // Caso 3: Lançamento Único (À Vista)
+      const newT = await storageService.saveTransaction({ 
+        ...baseData, 
+        amount: amount,
+        status: status || TransactionStatus.PENDING 
+      });
+      setTransactions(prev => [...prev, newT]);
+
     } catch (e: any) {
       alert("Erro ao salvar transação: " + e.message);
     }
@@ -242,7 +276,7 @@ const App: React.FC = () => {
         <div className="absolute top-0 -left-4 w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-[120px] opacity-20 animate-pulse"></div>
         <div className="absolute bottom-0 -right-4 w-96 h-96 bg-emerald-600 rounded-full mix-blend-multiply filter blur-[120px] opacity-20 animate-pulse animation-delay-2000"></div>
 
-        <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-8 rounded-[2.5rem] shadow-2xl w-full max-w-md z-10">
+        <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-8 rounded-[2.5rem] shadow-2xl w-full max-md z-10">
           <div className="text-center mb-10">
             <div className="inline-flex items-center justify-center p-5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl shadow-xl shadow-blue-500/20 mb-6">
               <ShieldCheck size={42} className="text-white" />
@@ -426,7 +460,7 @@ const App: React.FC = () => {
 
       {showProfileModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-md overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Configurações</h2>
               <button onClick={() => setShowProfileModal(false)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-100 rounded-full transition-all">
