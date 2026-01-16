@@ -17,15 +17,40 @@ export const storageService = {
     return data.user;
   },
 
-  async checkUserApproval(email: string) {
+  async syncUserToAccessRequests(user: any) {
+    // Garante que o usuário exista na tabela de controle de acesso
     const { data, error } = await supabase
       .from('access_requests')
-      .select('approved')
-      .eq('email', email)
+      .select('email')
+      .eq('email', user.email)
       .single();
-    
-    if (error && error.code !== 'PGRST116') throw new Error(error.message);
-    return data?.approved || false;
+
+    if (!data && (!error || error.code === 'PGRST116')) {
+      await supabase.from('access_requests').insert({
+        email: user.email,
+        name: user.user_metadata?.name || user.email.split('@')[0],
+        approved: user.id === ADMIN_UID // Admin já nasce aprovado
+      });
+    }
+  },
+
+  async checkUserApproval(email: string) {
+    try {
+      const { data, error } = await supabase
+        .from('access_requests')
+        .select('approved')
+        .eq('email', email)
+        .single();
+      
+      if (error) {
+        if (error.code === '42P01') throw new Error("A tabela 'access_requests' não foi encontrada no banco de dados.");
+        return false;
+      }
+      return data?.approved || false;
+    } catch (e: any) {
+      console.error("Erro ao validar permissão:", e.message);
+      return false;
+    }
   },
 
   async signOut() {
@@ -37,12 +62,14 @@ export const storageService = {
     return user;
   },
 
-  async updateUserProfile(name?: string, password?: string) {
-    const attributes: any = {};
-    if (name) attributes.data = { name };
-    if (password) attributes.password = password;
-
-    const { data, error } = await supabase.auth.updateUser(attributes);
+  // --- USER PROFILE ---
+  // Fix: Added missing updateUserProfile method
+  async updateUserProfile(name: string, password?: string) {
+    const updateData: any = { data: { name } };
+    if (password) {
+      updateData.password = password;
+    }
+    const { data, error } = await supabase.auth.updateUser(updateData);
     if (error) throw new Error(error.message);
     return data.user;
   },
@@ -59,8 +86,8 @@ export const storageService = {
   },
 
   async saveTransaction(transaction: any) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Not authenticated");
+    const user = await this.getCurrentUser();
+    if (!user) throw new Error("Usuário não autenticado");
 
     const dbPayload: any = {
       type: transaction.type,
@@ -74,20 +101,12 @@ export const storageService = {
       totalInstallments: transaction.totalInstallments || null,
     };
 
-    const id = transaction.id;
-    if (id && id.trim() !== "") {
-      const { data, error } = await supabase
-        .from('transactions')
-        .update(dbPayload)
-        .eq('id', id)
-        .select();
+    if (transaction.id && transaction.id.trim() !== "") {
+      const { data, error } = await supabase.from('transactions').update(dbPayload).eq('id', transaction.id).select();
       if (error) throw new Error(error.message);
       return data[0];
     } else {
-      const { data, error } = await supabase
-        .from('transactions')
-        .insert({ ...dbPayload, user_id: user.id })
-        .select();
+      const { data, error } = await supabase.from('transactions').insert({ ...dbPayload, user_id: user.id }).select();
       if (error) throw new Error(error.message);
       return data[0];
     }
@@ -98,11 +117,6 @@ export const storageService = {
     if (error) throw new Error(error.message);
   },
 
-  async deleteTransactionsByRecurrence(recurrenceId: string) {
-    const { error } = await supabase.from('transactions').delete().eq('recurrenceId', recurrenceId);
-    if (error) throw new Error(error.message);
-  },
-
   // --- CATEGORIES ---
   async getCategories(): Promise<Category[]> {
     const { data, error } = await supabase.from('categories').select('*');
@@ -110,30 +124,41 @@ export const storageService = {
     return (data && data.length > 0) ? (data as Category[]) : INITIAL_CATEGORIES;
   },
 
-  async saveCategory(category: Partial<Category>) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Not authenticated");
-    const cleanData = { ...category };
-    if (!cleanData.id) delete cleanData.id;
-    if (category.id && category.id.trim() !== "" && !category.id.startsWith('exp-') && !category.id.startsWith('inc-')) {
-      const { data, error } = await supabase.from('categories').update(cleanData).eq('id', category.id).select();
+  // Fix: Added missing saveCategory method
+  async saveCategory(category: any) {
+    const dbPayload: any = {
+      name: category.name,
+      icon: category.icon || 'Tag',
+    };
+    
+    if (category.type) {
+      dbPayload.type = category.type;
+    }
+
+    if (category.id && category.id.trim() !== "") {
+      const { data, error } = await supabase.from('categories').update(dbPayload).eq('id', category.id).select();
       if (error) throw new Error(error.message);
-      return data[0];
+      return data ? data[0] : null;
     } else {
-      const { data, error } = await supabase.from('categories').insert({ ...cleanData, user_id: user.id }).select();
+      const { data, error } = await supabase.from('categories').insert(dbPayload).select();
       if (error) throw new Error(error.message);
-      return data[0];
+      return data ? data[0] : null;
     }
   },
 
+  // Fix: Added missing deleteCategory method
   async deleteCategory(id: string) {
     const { error } = await supabase.from('categories').delete().eq('id', id);
     if (error) throw new Error(error.message);
   },
 
+  // --- ACCESS REQUESTS ---
   async getAllAccessRequests() {
     const { data, error } = await supabase.from('access_requests').select('*').order('created_at', { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (error.code === '42P01') throw new Error("Tabela de usuários não encontrada. Verifique o banco de dados.");
+      throw new Error(error.message);
+    }
     return data || [];
   },
 
