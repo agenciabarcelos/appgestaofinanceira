@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Transaction, TransactionType, TransactionStatus, Category, RecurrenceType } from '../types';
 import { Plus, Search, Filter, Trash2, Edit2, CheckCircle, Clock, AlertCircle, ChevronLeft, ChevronRight, Repeat, ChevronDown, AlertTriangle, X } from 'lucide-react';
 import { MONTHS, RECURRENCE_LABELS } from '../constants';
@@ -39,10 +39,18 @@ const Transactions: React.FC<TransactionsProps> = ({
     description: '',
     amount: 0,
     dueDate: new Date().toISOString().split('T')[0],
-    categoryId: categories[0]?.id || '',
+    categoryId: '',
     recurrence: RecurrenceType.NONE,
     status: TransactionStatus.PENDING,
   });
+
+  // Atualiza o categoryId padrão quando as categorias carregarem
+  useEffect(() => {
+    if (categories.length > 0 && !formData.categoryId) {
+       const firstPayable = categories.find(c => c.type === TransactionType.PAYABLE);
+       if (firstPayable) setFormData(prev => ({ ...prev, categoryId: firstPayable.id }));
+    }
+  }, [categories]);
 
   const filteredTransactions = useMemo(() => {
     return transactions
@@ -60,6 +68,10 @@ const Transactions: React.FC<TransactionsProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.categoryId) {
+      alert("Selecione uma categoria válida.");
+      return;
+    }
     if (editingId) {
       onEdit(editingId, formData);
     } else {
@@ -82,12 +94,13 @@ const Transactions: React.FC<TransactionsProps> = ({
       });
     } else {
       setEditingId(null);
+      const defaultCategory = categories.find(c => c.type === TransactionType.PAYABLE)?.id || '';
       setFormData({
         type: TransactionType.PAYABLE,
         description: '',
         amount: 0,
         dueDate: new Date().toISOString().split('T')[0],
-        categoryId: categories.find(c => c.type === TransactionType.PAYABLE)?.id || '',
+        categoryId: defaultCategory,
         recurrence: RecurrenceType.NONE,
         status: TransactionStatus.PENDING,
       });

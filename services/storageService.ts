@@ -43,28 +43,33 @@ export const storageService = {
       .order('dueDate', { ascending: true });
     
     if (error) throw error;
-    return data as Transaction[];
+    return (data || []) as Transaction[];
   },
 
   async saveTransaction(transaction: Partial<Transaction>) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
 
-    if (transaction.id) {
-      // Atualização parcial
+    // Limpeza de dados para evitar erros de tipo UUID
+    const cleanData = { ...transaction };
+    if (!cleanData.id) delete cleanData.id;
+    if (!cleanData.recurrenceId) delete cleanData.recurrenceId;
+
+    if (transaction.id && transaction.id.trim() !== "") {
+      // Atualização
       const { data, error } = await supabase
         .from('transactions')
-        .update(transaction)
+        .update(cleanData)
         .eq('id', transaction.id)
         .select();
       
       if (error) throw error;
       return data[0];
     } else {
-      // Inserção nova
+      // Inserção
       const { data, error } = await supabase
         .from('transactions')
-        .insert({ ...transaction, user_id: user.id })
+        .insert({ ...cleanData, user_id: user.id })
         .select();
       
       if (error) throw error;
@@ -97,17 +102,20 @@ export const storageService = {
       .select('*');
     
     if (error) throw error;
-    return data.length > 0 ? (data as Category[]) : INITIAL_CATEGORIES;
+    return data && data.length > 0 ? (data as Category[]) : INITIAL_CATEGORIES;
   },
 
   async saveCategory(category: Partial<Category>) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
 
-    if (category.id) {
+    const cleanData = { ...category };
+    if (!cleanData.id) delete cleanData.id;
+
+    if (category.id && category.id.trim() !== "") {
       const { data, error } = await supabase
         .from('categories')
-        .update(category)
+        .update(cleanData)
         .eq('id', category.id)
         .select();
       if (error) throw error;
@@ -115,7 +123,7 @@ export const storageService = {
     } else {
       const { data, error } = await supabase
         .from('categories')
-        .insert({ ...category, user_id: user.id })
+        .insert({ ...cleanData, user_id: user.id })
         .select();
       if (error) throw error;
       return data[0];
