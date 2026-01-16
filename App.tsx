@@ -6,7 +6,7 @@ import Dashboard from './components/Dashboard';
 import Transactions from './components/Transactions';
 import Categories from './components/Categories';
 import Reports from './components/Reports';
-import { LayoutDashboard, ReceiptText, Tags, BarChart3, LogOut, ShieldCheck, User as UserIcon, Lock, Settings, X, Loader2, AlertTriangle, Hourglass, Mail } from 'lucide-react';
+import { LayoutDashboard, ReceiptText, Tags, BarChart3, LogOut, ShieldCheck, User as UserIcon, Lock, Settings, X, Loader2, AlertTriangle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TRANSACTIONS' | 'CATEGORIES' | 'REPORTS'>('DASHBOARD');
@@ -35,13 +35,10 @@ const App: React.FC = () => {
         const u: User = {
           name: session.user.user_metadata.name || session.user.email?.split('@')[0],
           email: session.user.email!,
-          isLoggedIn: true,
-          isApproved: session.user.user_metadata.approved === true
+          isLoggedIn: true
         };
         setUser(u);
-        if (u.isApproved) {
-          fetchData();
-        }
+        fetchData();
       } else {
         setUser(null);
         setLoading(false);
@@ -58,12 +55,9 @@ const App: React.FC = () => {
         setUser({
           name: sbUser.user_metadata.name || sbUser.email?.split('@')[0],
           email: sbUser.email!,
-          isLoggedIn: true,
-          isApproved: sbUser.user_metadata.approved === true
+          isLoggedIn: true
         });
-        if (sbUser.user_metadata.approved === true) {
-          await fetchData();
-        }
+        await fetchData();
       }
     } catch (e: any) {
       console.error("Erro na sessão:", e);
@@ -109,7 +103,6 @@ const App: React.FC = () => {
     setAuthError('');
     try {
       await storageService.signUp(authForm.email, authForm.password, authForm.name);
-      alert('Solicitação enviada! O desenvolvedor (contato@agenciabarcelos.com.br) recebeu um alerta e irá aprovar seu acesso em breve.');
       setIsRegistering(false);
     } catch (err: any) {
       setAuthError(err.message || 'Erro ao criar conta.');
@@ -127,7 +120,7 @@ const App: React.FC = () => {
   };
 
   const addTransaction = async (data: any) => {
-    if (!user || !user.isApproved) return;
+    if (!user) return;
     const { recurrence, status, installmentsCount = 1, amount, ...baseData } = data;
     
     try {
@@ -273,7 +266,7 @@ const App: React.FC = () => {
     );
   }
 
-  // TELA DE LOGIN / CADASTRO
+  // LOGIN / REGISTER SCREEN
   if (!user || !user.isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
@@ -285,9 +278,9 @@ const App: React.FC = () => {
             <div className="inline-flex items-center justify-center p-4 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-xl shadow-blue-500/20 mb-5">
               <ShieldCheck size={32} className="text-white" />
             </div>
-            <h1 className="text-2xl font-black text-white mb-2 tracking-tight">Gestão Financeira</h1>
+            <h1 className="text-2xl font-black text-white mb-2 tracking-tight uppercase">Gestão Financeira</h1>
             <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest">
-              {isRegistering ? 'Criar Conta Cloud' : 'Autenticação de Acesso'}
+              {isRegistering ? 'Criar Nova Conta' : 'Autenticação Cloud'}
             </p>
           </div>
 
@@ -298,7 +291,7 @@ const App: React.FC = () => {
                 <input 
                   required
                   type="text" 
-                  placeholder="Seu Nome"
+                  placeholder="Seu Nome Completo"
                   className="w-full pl-11 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white/10 transition-all text-sm"
                   value={authForm.name}
                   onChange={e => setAuthForm({ ...authForm, name: e.target.value })}
@@ -323,7 +316,7 @@ const App: React.FC = () => {
               <input 
                 required
                 type="password" 
-                placeholder="Senha"
+                placeholder="Senha de Acesso"
                 className="w-full pl-11 pr-4 py-3.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white/10 transition-all text-sm"
                 value={authForm.password}
                 onChange={e => setAuthForm({ ...authForm, password: e.target.value })}
@@ -341,7 +334,7 @@ const App: React.FC = () => {
               disabled={authLoading}
               className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black rounded-xl hover:brightness-110 transition-all shadow-xl shadow-blue-600/20 active:scale-[0.98] uppercase tracking-wider text-xs flex items-center justify-center gap-2"
             >
-              {authLoading ? <Loader2 className="animate-spin" size={18} /> : (isRegistering ? 'Solicitar Acesso' : 'Acessar Painel')}
+              {authLoading ? <Loader2 className="animate-spin" size={18} /> : (isRegistering ? 'Criar Conta' : 'Acessar Painel')}
             </button>
           </form>
 
@@ -350,7 +343,7 @@ const App: React.FC = () => {
               onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); }}
               className="text-slate-500 hover:text-blue-400 text-[10px] font-black transition-colors uppercase tracking-[0.15em]"
             >
-              {isRegistering ? 'Voltar para o Login' : 'Novo por aqui? Criar Conta'}
+              {isRegistering ? 'Voltar para o Login' : 'Ainda não tem conta? Cadastre-se'}
             </button>
           </div>
         </div>
@@ -358,58 +351,7 @@ const App: React.FC = () => {
     );
   }
 
-  // TELA DE AGUARDANDO APROVAÇÃO
-  if (user && !user.isApproved) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-[120px] opacity-20 animate-pulse"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-rose-600 rounded-full mix-blend-multiply filter blur-[120px] opacity-20 animate-pulse animation-delay-2000"></div>
-
-        <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-8 md:p-12 rounded-[3rem] shadow-2xl w-full max-w-[500px] z-10 text-center animate-in zoom-in duration-300">
-          <div className="mx-auto w-20 h-20 bg-amber-500/10 rounded-3xl flex items-center justify-center text-amber-500 mb-8 border border-amber-500/20">
-            <Hourglass size={40} className="animate-spin-slow" />
-          </div>
-          
-          <h2 className="text-3xl font-black text-white mb-4 tracking-tight">Acesso Pendente</h2>
-          <p className="text-slate-400 text-sm font-medium mb-8 leading-relaxed">
-            Olá <span className="text-white font-bold">{user.name}</span>! Sua conta foi criada com sucesso, mas para garantir a segurança, todos os novos acessos precisam ser habilitados pelo desenvolvedor.
-          </p>
-
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-8 text-left">
-            <div className="flex items-center gap-3 mb-4">
-               <Mail size={18} className="text-blue-400" />
-               <span className="text-xs font-black text-white uppercase tracking-widest">Contato para Aprovação</span>
-            </div>
-            <p className="text-slate-300 text-sm font-bold mb-1">Agência Barcelos</p>
-            <p className="text-blue-400 text-xs font-black uppercase tracking-tighter">contato@agenciabarcelos.com.br</p>
-          </div>
-
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-8">
-            Você receberá um e-mail assim que seu acesso for liberado.
-          </p>
-
-          <button 
-            onClick={handleLogout}
-            className="w-full py-4 bg-white/5 hover:bg-white/10 text-rose-500 font-black rounded-2xl transition-all border border-white/10 uppercase tracking-widest text-xs"
-          >
-            Sair da Conta
-          </button>
-        </div>
-        
-        <style>{`
-          @keyframes spin-slow {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-          .animate-spin-slow {
-            animation: spin-slow 8s linear infinite;
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  // TELA PRINCIPAL (APPROVED)
+  // MAIN APP SCREEN
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
       <aside className="w-full md:w-64 bg-slate-950 md:h-screen sticky top-0 z-40 flex flex-col">

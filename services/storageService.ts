@@ -17,20 +17,16 @@ export const storageService = {
   },
 
   async signUp(email: string, password: string, name: string) {
-    // O desenvolvedor é auto-aprovado, novos usuários ficam pendentes
-    const isDeveloper = email.toLowerCase() === 'contato@agenciabarcelos.com.br';
-    
     const { data, error } = await supabase.auth.signUp({ 
       email, 
       password,
-      options: { 
-        data: { 
-          name,
-          approved: isDeveloper 
-        } 
-      }
+      options: { data: { name } }
     });
     if (error) throw error;
+    
+    // Also create a profile record for access management (used by AdminApproval)
+    await supabase.from('profiles').insert({ email, name, approved: false });
+    
     return data.user;
   },
 
@@ -41,6 +37,30 @@ export const storageService = {
   async getCurrentUser() {
     const { data: { user } } = await supabase.auth.getUser();
     return user;
+  },
+
+  // --- ACCESS CONTROL (Admin) ---
+  // Fixes: Property 'getAllAccessRequests' does not exist on storageService
+  async getAllAccessRequests() {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Fixes: Property 'updateApproval' does not exist on storageService
+  async updateApproval(email: string, approved: boolean) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ approved })
+      .eq('email', email)
+      .select();
+    
+    if (error) throw error;
+    return data ? data[0] : null;
   },
 
   // --- TRANSACTIONS ---
