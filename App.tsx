@@ -1,24 +1,25 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, TransactionType, TransactionStatus, Category, RecurrenceType, User } from './types';
-import { storageService, supabase } from './services/storageService';
+import { storageService, supabase, ADMIN_UID } from './services/storageService';
 import Dashboard from './components/Dashboard';
 import Transactions from './components/Transactions';
 import Categories from './components/Categories';
 import Reports from './components/Reports';
-import { LayoutDashboard, ReceiptText, Tags, BarChart3, LogOut, ShieldCheck, User as UserIcon, Lock, Settings, X, Loader2, AlertTriangle } from 'lucide-react';
+import Profile from './components/Profile';
+import AdminApproval from './components/AdminApproval';
+import { LayoutDashboard, ReceiptText, Tags, BarChart3, LogOut, ShieldCheck, Loader2, User as UserIcon, ShieldAlert } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TRANSACTIONS' | 'CATEGORIES' | 'REPORTS'>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TRANSACTIONS' | 'CATEGORIES' | 'REPORTS' | 'ADMIN'>('DASHBOARD');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<(User & { id?: string }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   
-  const [isRegistering, setIsRegistering] = useState(false);
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
@@ -26,14 +27,32 @@ const App: React.FC = () => {
 
   useEffect(() => {
     checkSession();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
+        // Verifica se o usuário é admin ou está aprovado
+        if (session.user.id !== ADMIN_UID) {
+          try {
+            const isApproved = await storageService.checkUserApproval(session.user.email!);
+            if (!isApproved) {
+              await storageService.signOut();
+              setUser(null);
+              setAuthError('Usuário sem permissão. Por favor, entre em contato com o administrador.');
+              return;
+            }
+          } catch (e) {
+            await storageService.signOut();
+            setUser(null);
+            return;
+          }
+        }
+
         setUser({
+          id: session.user.id,
           name: session.user.user_metadata.name || session.user.email?.split('@')[0],
           email: session.user.email!,
           isLoggedIn: true
         });
-        fetchData();
+        fetchData(session.user.id);
       } else {
         setUser(null);
         setLoading(false);
@@ -46,26 +65,39 @@ const App: React.FC = () => {
     try {
       const sbUser = await storageService.getCurrentUser();
       if (sbUser) {
-        setUser({
+        // Se não for admin, verifica aprovação
+        if (sbUser.id !== ADMIN_UID) {
+          const isApproved = await storageService.checkUserApproval(sbUser.email!);
+          if (!isApproved) {
+            await storageService.signOut();
+            setUser(null);
+            setLoading(false);
+            return;
+          }
+        }
+
+        const userData = {
+          id: sbUser.id,
           name: sbUser.user_metadata.name || sbUser.email?.split('@')[0],
           email: sbUser.email!,
           isLoggedIn: true
-        });
-        await fetchData();
+        };
+        setUser(userData);
+        await fetchData(sbUser.id);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error(e.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (userId?: string) => {
     setLoading(true);
     setGlobalError(null);
     try {
       const [tData, cData] = await Promise.all([
-        storageService.getTransactions(),
+        storageService.getTransactions(userId),
         storageService.getCategories()
       ]);
       setTransactions(tData);
@@ -79,26 +111,23 @@ const App: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError('');
     setAuthLoading(true);
     try {
-      await storageService.signIn(authForm.email, authForm.password);
+      const loginUser = await storageService.signIn(authForm.email, authForm.password);
+      
+      // Validação imediata de aprovação para não-admins
+      if (loginUser.id !== ADMIN_UID) {
+        const isApproved = await storageService.checkUserApproval(authForm.email);
+        if (!isApproved) {
+          await storageService.signOut();
+          setAuthError('Usuário sem permissão. Por favor, entre em contato com o administrador.');
+          setAuthLoading(false);
+          return;
+        }
+      }
     } catch (err: any) {
-      setAuthError('Falha no login. Verifique e-mail e senha.');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthLoading(true);
-    try {
-      await storageService.signUp(authForm.email, authForm.password, authForm.name);
-      setIsRegistering(false);
-      alert("Conta criada com sucesso! Você já pode acessar o sistema.");
-    } catch (err: any) {
-      setAuthError('Erro ao criar conta.');
-    } finally {
+      setAuthError(err.message || 'Falha no login. Verifique e-mail e senha.');
       setAuthLoading(false);
     }
   };
@@ -108,20 +137,18 @@ const App: React.FC = () => {
     setUser(null);
     setTransactions([]);
     setCategories([]);
+    setActiveTab('DASHBOARD');
   };
 
   const addTransaction = async (data: any) => {
     const { installmentsCount, recurrence, amount, description, ...baseData } = data;
     try {
       setLoading(true);
-      
-      // CASO 1: PARCELAMENTO (DIVISÃO DO VALOR TOTAL)
       if (installmentsCount > 1) {
         const amountPerParcel = amount / installmentsCount;
         const baseId = crypto.randomUUID();
         const startDate = new Date(data.dueDate);
         const promises = [];
-        
         for (let i = 0; i < installmentsCount; i++) {
           const d = new Date(startDate);
           d.setMonth(d.getMonth() + i);
@@ -136,20 +163,15 @@ const App: React.FC = () => {
           }));
         }
         await Promise.all(promises);
-      } 
-      // CASO 2: RECORRÊNCIA (REPETIÇÃO DO VALOR INTEGRAL)
-      else if (recurrence !== RecurrenceType.NONE) {
+      } else if (recurrence !== RecurrenceType.NONE) {
         let monthsStep = 1;
-        let count = 12; // Padrão: criar para o próximo 1 ano
-
+        let count = 12;
         if (recurrence === RecurrenceType.QUARTERLY) { monthsStep = 3; count = 4; }
         else if (recurrence === RecurrenceType.SEMIANNUAL) { monthsStep = 6; count = 2; }
         else if (recurrence === RecurrenceType.ANNUAL) { monthsStep = 12; count = 2; }
-
         const baseId = crypto.randomUUID();
         const startDate = new Date(data.dueDate);
         const promises = [];
-        
         for (let i = 0; i < count; i++) {
           const d = new Date(startDate);
           d.setMonth(d.getMonth() + (i * monthsStep));
@@ -164,13 +186,10 @@ const App: React.FC = () => {
           }));
         }
         await Promise.all(promises);
-      } 
-      // CASO 3: LANÇAMENTO ÚNICO
-      else {
+      } else {
         await storageService.saveTransaction({ ...baseData, description, amount });
       }
-      
-      await fetchData();
+      await fetchData(user?.id);
     } catch (e: any) {
       alert("Erro ao salvar: " + e.message);
     } finally {
@@ -178,12 +197,12 @@ const App: React.FC = () => {
     }
   };
 
-  const updateTransaction = async (id: string, data: Partial<Transaction>) => {
+  const updateTransaction = async (id: string, data: any) => {
     try {
       await storageService.saveTransaction({ id, ...data });
-      await fetchData();
+      await fetchData(user?.id);
     } catch (e: any) {
-      alert("Erro: " + e.message);
+      alert("Erro ao atualizar registro: " + e.message);
     }
   };
 
@@ -197,7 +216,7 @@ const App: React.FC = () => {
       } else {
         await storageService.deleteTransaction(id);
       }
-      await fetchData();
+      await fetchData(user?.id);
     } catch (e: any) {
       alert("Erro: " + e.message);
     }
@@ -211,11 +230,13 @@ const App: React.FC = () => {
     });
   }, [transactions]);
 
+  const isAdmin = user?.id === ADMIN_UID;
+
   if (loading && !user) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
         <Loader2 className="text-blue-500 animate-spin mb-4" size={48} />
-        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Sincronizando Banco de Dados...</p>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Sincronizando...</p>
       </div>
     );
   }
@@ -227,16 +248,19 @@ const App: React.FC = () => {
           <div className="text-center mb-8">
             <div className="inline-flex p-4 bg-blue-600 rounded-2xl shadow-xl mb-5"><ShieldCheck size={32} className="text-white" /></div>
             <h1 className="text-2xl font-black text-white uppercase">Gestão Financeira</h1>
-            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">{isRegistering ? 'Cadastre-se Grátis' : 'Login de Acesso'}</p>
+            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Login de Acesso</p>
           </div>
-          <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
-            {isRegistering && <input required type="text" placeholder="Nome" className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500" value={authForm.name} onChange={e => setAuthForm({...authForm, name: e.target.value})} />}
+          <form onSubmit={handleLogin} className="space-y-4">
             <input required type="email" placeholder="E-mail" className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} />
             <input required type="password" placeholder="Senha" className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} />
-            {authError && <p className="text-rose-500 text-[10px] font-bold text-center uppercase">{authError}</p>}
-            <button type="submit" disabled={authLoading} className="w-full py-4 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition-all uppercase tracking-widest text-xs flex items-center justify-center">{authLoading ? <Loader2 className="animate-spin" size={20} /> : (isRegistering ? 'Criar Conta' : 'Entrar no Painel')}</button>
+            {authError && <div className="p-4 bg-rose-500/20 border border-rose-500/30 rounded-xl text-rose-400 text-[10px] font-black text-center uppercase leading-relaxed">{authError}</div>}
+            <button type="submit" disabled={authLoading} className="w-full py-4 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition-all uppercase tracking-widest text-xs flex items-center justify-center">
+              {authLoading ? <Loader2 className="animate-spin" size={20} /> : 'Entrar no Painel'}
+            </button>
           </form>
-          <button onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); }} className="w-full mt-6 text-slate-500 hover:text-white text-[10px] font-bold uppercase tracking-widest transition-colors">{isRegistering ? 'Já tenho conta' : 'Ainda não tenho conta'}</button>
+          <div className="mt-8 text-center">
+             <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Acesso Restrito</p>
+          </div>
         </div>
       </div>
     );
@@ -254,31 +278,67 @@ const App: React.FC = () => {
           <SidebarItem icon={<ReceiptText size={20} />} label="Lançamentos" active={activeTab === 'TRANSACTIONS'} onClick={() => setActiveTab('TRANSACTIONS')} />
           <SidebarItem icon={<Tags size={20} />} label="Categorias" active={activeTab === 'CATEGORIES'} onClick={() => setActiveTab('CATEGORIES')} />
           <SidebarItem icon={<BarChart3 size={20} />} label="Relatórios" active={activeTab === 'REPORTS'} onClick={() => setActiveTab('REPORTS')} />
+          
+          {isAdmin && (
+            <div className="pt-4 mt-4 border-t border-white/5">
+              <p className="px-4 mb-2 text-[9px] font-black text-slate-500 uppercase tracking-widest">Administrativo</p>
+              <SidebarItem 
+                icon={<ShieldAlert size={20} />} 
+                label="Administração" 
+                active={activeTab === 'ADMIN'} 
+                onClick={() => setActiveTab('ADMIN')} 
+              />
+            </div>
+          )}
         </nav>
-        <div className="mt-auto pt-6 border-t border-white/5">
-          <button onClick={handleLogout} className="w-full flex items-center gap-2 text-rose-500 hover:text-rose-400 font-black uppercase text-[10px] tracking-widest p-2 transition-all"><LogOut size={16} /> Encerrar Sessão</button>
+        <div className="mt-auto pt-6 border-t border-white/5 space-y-2">
+          <button 
+            onClick={() => setShowProfileModal(true)}
+            className="w-full flex items-center gap-2 text-slate-400 hover:text-white font-black uppercase text-[10px] tracking-widest p-2 transition-all"
+          >
+            <UserIcon size={16} /> Meu Perfil
+          </button>
+          <button onClick={handleLogout} className="w-full flex items-center gap-2 text-rose-500 hover:text-rose-400 font-black uppercase text-[10px] tracking-widest p-2 transition-all">
+            <LogOut size={16} /> Encerrar Sessão
+          </button>
         </div>
       </aside>
-      <main className="flex-1 p-6 md:p-10 relative">
-        {loading && (
-          <div className="absolute top-0 left-0 right-0 h-1 bg-blue-600/20 z-50">
-            <div className="h-full bg-blue-600 animate-pulse"></div>
+      <main className="flex-1 p-6 md:p-10 relative overflow-y-auto h-screen">
+        <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">
+              {activeTab === 'DASHBOARD' && 'Dashboard'}
+              {activeTab === 'TRANSACTIONS' && 'Lançamentos'}
+              {activeTab === 'CATEGORIES' && 'Categorias'}
+              {activeTab === 'REPORTS' && 'Relatórios'}
+              {activeTab === 'ADMIN' && 'Administração Global'}
+            </h1>
+            <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">
+              Olá, {user.name}. {isAdmin ? 'Você está em modo Administrador.' : 'Bem-vindo ao seu painel financeiro.'}
+            </p>
           </div>
-        )}
-        <header className="mb-8">
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">
-            {activeTab === 'DASHBOARD' && 'Dashboard'}
-            {activeTab === 'TRANSACTIONS' && 'Lançamentos'}
-            {activeTab === 'CATEGORIES' && 'Categorias'}
-            {activeTab === 'REPORTS' && 'Relatórios'}
-          </h1>
-          <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">Olá, {user.name}. Bem-vindo ao seu painel financeiro.</p>
+          {isAdmin && activeTab !== 'ADMIN' && (
+            <div className="bg-blue-600/10 border border-blue-600/20 px-4 py-2 rounded-xl flex items-center gap-2">
+              <ShieldCheck className="text-blue-600" size={16} />
+              <span className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Modo Administrador Ativo</span>
+            </div>
+          )}
         </header>
+
         {activeTab === 'DASHBOARD' && <Dashboard transactions={processedTransactions} categories={categories} currentMonth={currentMonth} currentYear={currentYear} />}
         {activeTab === 'TRANSACTIONS' && <Transactions transactions={processedTransactions} categories={categories} currentMonth={currentMonth} currentYear={currentYear} onAdd={addTransaction} onEdit={updateTransaction} onDelete={deleteTransaction} onNavigate={(m, y) => { setCurrentMonth(m); setCurrentYear(y); }} />}
-        {activeTab === 'CATEGORIES' && <Categories categories={categories} transactions={processedTransactions} onAdd={(n, t) => storageService.saveCategory({name: n, type: t, icon: 'Tag'}).then(fetchData)} onEdit={(id, n) => storageService.saveCategory({id, name: n}).then(fetchData)} onDelete={id => storageService.deleteCategory(id).then(fetchData)} />}
+        {activeTab === 'CATEGORIES' && <Categories categories={categories} transactions={processedTransactions} onAdd={(n, t) => storageService.saveCategory({name: n, type: t, icon: 'Tag'}).then(() => fetchData(user.id))} onEdit={(id, n) => storageService.saveCategory({id, name: n}).then(() => fetchData(user.id))} onDelete={id => storageService.deleteCategory(id).then(() => fetchData(user.id))} />}
         {activeTab === 'REPORTS' && <Reports transactions={processedTransactions} categories={categories} />}
+        {activeTab === 'ADMIN' && isAdmin && <AdminApproval />}
       </main>
+
+      {showProfileModal && user && (
+        <Profile 
+          user={{ name: user.name, email: user.email }} 
+          onClose={() => setShowProfileModal(false)}
+          onUpdateSuccess={(newName) => setUser({ ...user, name: newName })}
+        />
+      )}
     </div>
   );
 };
