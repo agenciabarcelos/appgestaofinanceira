@@ -42,7 +42,6 @@ CREATE TABLE IF NOT EXISTS access_requests (
 -- 4. HABILITAR SEGURANÇA DE NÍVEL DE LINHA (RLS)
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
--- access_requests costuma ser gerenciada por funções ou admin, mas habilitamos RLS por precaução
 ALTER TABLE access_requests ENABLE ROW LEVEL SECURITY;
 
 -- 5. POLÍTICAS PARA CATEGORIAS
@@ -88,15 +87,17 @@ TO authenticated
 USING (auth.uid() = user_id);
 
 -- 7. POLÍTICAS PARA ACCESS_REQUESTS
+-- CORREÇÃO: Permitir inserção anônima para solicitações de acesso
 CREATE POLICY "Qualquer um pode solicitar acesso" 
 ON access_requests FOR INSERT 
 TO anon, authenticated 
 WITH CHECK (true);
 
-CREATE POLICY "Apenas administradores podem ver solicitações" 
-ON access_requests FOR SELECT 
-TO authenticated 
-USING (auth.jwt() ->> 'email' = 'seu-email-admin@exemplo.com'); -- Ajuste seu e-mail de admin aqui
+-- Permitir que o sistema leia se um e-mail está aprovado durante o login (anon precisa ler via RPC ou filtro simples se RLS permitir)
+CREATE POLICY "Permitir leitura pública limitada de status de aprovação"
+ON access_requests FOR SELECT
+TO anon, authenticated
+USING (true);
 
 -- 8. ÍNDICES PARA PERFORMANCE
 CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, dueDate);

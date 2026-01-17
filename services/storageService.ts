@@ -19,8 +19,38 @@ const isValidUUID = (uuid: any) => {
 export const storageService = {
   // --- AUTHENTICATION ---
   async signIn(email: string, password: string) {
+    // 1. Verifica se está aprovado antes de prosseguir
+    const { data: approval, error: appError } = await supabase
+      .from('access_requests')
+      .select('approved')
+      .eq('email', email)
+      .single();
+
+    if (appError || !approval?.approved) {
+      throw new Error("Seu acesso ainda não foi aprovado pelo administrador.");
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
+    return data.user;
+  },
+
+  async signUp(email: string, password: string, name: string) {
+    // 1. Cria o usuário no Auth
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } }
+    });
+    if (error) throw new Error(error.message);
+
+    // 2. Cria a solicitação de acesso
+    const { error: reqError } = await supabase
+      .from('access_requests')
+      .insert([{ email, name, approved: false }]);
+    
+    if (reqError) console.error("Erro ao registrar solicitação:", reqError);
+    
     return data.user;
   },
 
@@ -33,7 +63,7 @@ export const storageService = {
     return user;
   },
 
-  // --- USER PROFILE ---
+  // Fix: Added updateUserProfile to allow updating name and password via Supabase Auth
   async updateUserProfile(name: string, password?: string) {
     const updateData: any = { data: { name } };
     if (password) {
@@ -60,10 +90,15 @@ export const storageService = {
     const user = await this.getCurrentUser();
     if (!user) throw new Error("Usuário não autenticado");
 
+    // Garantia absoluta de valor numérico
+    const numericAmount = typeof transaction.amount === 'string' 
+      ? parseFloat(transaction.amount.replace(',', '.')) 
+      : transaction.amount;
+
     const dbPayload: any = {
       type: transaction.type,
       description: transaction.description,
-      amount: parseFloat(transaction.amount) || 0,
+      amount: isNaN(numericAmount) ? 0 : numericAmount,
       dueDate: transaction.dueDate,
       categoryId: isValidUUID(transaction.categoryId) ? transaction.categoryId : null,
       status: transaction.status,

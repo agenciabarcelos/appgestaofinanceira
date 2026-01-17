@@ -35,7 +35,7 @@ const Transactions: React.FC<TransactionsProps> = ({
   const [formData, setFormData] = useState({
     type: TransactionType.PAYABLE,
     description: '',
-    amount: 0,
+    amount: '' as any, // Alterado para string para melhor UX no input
     dueDate: new Date().toISOString().split('T')[0],
     categoryId: '',
     recurrence: RecurrenceType.NONE,
@@ -44,6 +44,7 @@ const Transactions: React.FC<TransactionsProps> = ({
   });
 
   useEffect(() => {
+    // Garante categoria correta ao mudar tipo (Payable/Receivable)
     const currentCategory = categories.find(c => c.id === formData.categoryId);
     if (!currentCategory || currentCategory.type !== formData.type) {
       const firstValid = categories.find(c => c.type === formData.type);
@@ -71,10 +72,17 @@ const Transactions: React.FC<TransactionsProps> = ({
       alert("Por favor, selecione uma categoria.");
       return;
     }
+
+    // Parse final do valor antes de enviar
+    const finalData = {
+      ...formData,
+      amount: typeof formData.amount === 'string' ? parseFloat(formData.amount.replace(',', '.')) : formData.amount
+    };
+
     if (editingId) {
-      onEdit(editingId, formData);
+      onEdit(editingId, finalData);
     } else {
-      onAdd(formData);
+      onAdd(finalData);
     }
     closeModal();
   };
@@ -98,7 +106,7 @@ const Transactions: React.FC<TransactionsProps> = ({
       setFormData({
         type: TransactionType.PAYABLE,
         description: '',
-        amount: 0,
+        amount: '',
         dueDate: new Date().toISOString().split('T')[0],
         categoryId: defaultCategory,
         recurrence: RecurrenceType.NONE,
@@ -126,7 +134,6 @@ const Transactions: React.FC<TransactionsProps> = ({
     }
   };
 
-  // Função para pegar o nome da categoria com fallback seguro
   const getCategoryName = (categoryId: string, type: TransactionType) => {
     const category = categories.find(c => c.id === categoryId);
     if (category) return category.name;
@@ -159,7 +166,7 @@ const Transactions: React.FC<TransactionsProps> = ({
             <input 
               type="text" 
               placeholder="Buscar..."
-              className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 w-full text-sm outline-none"
+              className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 w-full text-sm outline-none font-medium"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -306,8 +313,8 @@ const Transactions: React.FC<TransactionsProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Valor {formData.installmentsCount > 1 ? 'Total' : ''} (R$)</label>
-                  <input required type="number" step="0.01" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-800 text-lg" placeholder="0,00" value={formData.amount} onChange={e => setFormData({...formData, amount: parseFloat(e.target.value)})} />
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Valor (R$)</label>
+                  <input required type="number" step="0.01" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-800 text-lg" placeholder="0,00" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
                 </div>
 
                 <div>
@@ -333,7 +340,6 @@ const Transactions: React.FC<TransactionsProps> = ({
                 </div>
               </div>
 
-              {/* SEÇÃO DE REPETIÇÃO - APENAS PARA NOVOS LANÇAMENTOS */}
               {!editingId && (
                 <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-6">
                   <div className="flex items-center gap-2 mb-2">
@@ -376,15 +382,6 @@ const Transactions: React.FC<TransactionsProps> = ({
                       </div>
                     </div>
                   </div>
-                  
-                  {formData.installmentsCount > 1 && (
-                    <div className="flex items-center gap-2 text-blue-600 bg-blue-50 p-3 rounded-xl border border-blue-100">
-                      <AlertTriangle size={14} className="shrink-0" />
-                      <p className="text-[10px] font-bold uppercase leading-tight">
-                        O valor total de {formatCurrency(formData.amount)} será dividido em {formData.installmentsCount} parcelas de {formatCurrency(formData.amount / formData.installmentsCount)}.
-                      </p>
-                    </div>
-                  )}
                 </div>
               )}
 
