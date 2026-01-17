@@ -87,7 +87,7 @@ const Transactions: React.FC<TransactionsProps> = ({
         description: transaction.description,
         amount: transaction.amount,
         dueDate: transaction.dueDate,
-        categoryId: transaction.categoryId,
+        categoryId: transaction.categoryId || '',
         recurrence: RecurrenceType.NONE, 
         status: transaction.status,
         installmentsCount: 1,
@@ -124,6 +124,18 @@ const Transactions: React.FC<TransactionsProps> = ({
       case TransactionStatus.OVERDUE: return 'bg-rose-50 text-rose-700 hover:bg-rose-100';
       default: return 'bg-amber-50 text-amber-700 hover:bg-amber-100';
     }
+  };
+
+  // Função para pegar o nome da categoria com fallback seguro
+  const getCategoryName = (categoryId: string, type: TransactionType) => {
+    const category = categories.find(c => c.id === categoryId);
+    if (category) return category.name;
+    return type === TransactionType.PAYABLE ? 'Despesa Geral' : 'Receita Geral';
+  };
+
+  const getCategoryIcon = (categoryId: string) => {
+    const category = categories.find(c => c.id === categoryId);
+    return category?.icon || 'Tag';
   };
 
   return (
@@ -202,10 +214,10 @@ const Transactions: React.FC<TransactionsProps> = ({
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                          <div className="p-1.5 bg-slate-100 rounded-lg text-slate-500">
-                           <Icon name={categories.find(c => c.id === t.categoryId)?.icon || 'Tag'} size={12} />
+                           <Icon name={getCategoryIcon(t.categoryId)} size={12} />
                          </div>
                          <span className="text-xs font-bold text-slate-600">
-                           {categories.find(c => c.id === t.categoryId)?.name || 'Outros'}
+                           {getCategoryName(t.categoryId, t.type)}
                          </span>
                       </div>
                     </td>

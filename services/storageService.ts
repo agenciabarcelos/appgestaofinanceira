@@ -12,8 +12,9 @@ export const ADMIN_UID = '00000000-0000-0000-0000-000000000000';
 
 // Função auxiliar para validar se uma string é um UUID válido
 const isValidUUID = (uuid: string) => {
+  if (!uuid) return false;
   const s = "" + uuid;
-  const match = s.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  const match = s.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
   return !!match;
 };
 
@@ -61,23 +62,21 @@ export const storageService = {
     const user = await this.getCurrentUser();
     if (!user) throw new Error("Usuário não autenticado");
 
-    // Sanitização de UUIDs: Se não for um UUID válido, enviamos null para evitar erro de sintaxe no Postgres
-    const cleanId = transaction.id && isValidUUID(transaction.id) ? transaction.id : null;
-    const cleanCategoryId = transaction.categoryId && isValidUUID(transaction.categoryId) ? transaction.categoryId : null;
-    const cleanRecurrenceId = transaction.recurrenceId && isValidUUID(transaction.recurrenceId) ? transaction.recurrenceId : null;
-
+    // Agora enviamos o categoryId se for um UUID válido (incluindo os novos constantes)
     const dbPayload: any = {
       type: transaction.type,
       description: transaction.description,
       amount: transaction.amount,
       dueDate: transaction.dueDate,
-      categoryId: cleanCategoryId, // Corrigido: null se não for UUID
+      categoryId: isValidUUID(transaction.categoryId) ? transaction.categoryId : null,
       status: transaction.status,
-      recurrenceId: cleanRecurrenceId, // Corrigido: null se não for UUID
+      recurrenceId: isValidUUID(transaction.recurrenceId) ? transaction.recurrenceId : null,
       installment: transaction.installment || null,
       totalInstallments: transaction.totalInstallments || null,
       user_id: user.id
     };
+
+    const cleanId = transaction.id && isValidUUID(transaction.id) ? transaction.id : null;
 
     if (cleanId) {
       const { data, error } = await supabase.from('transactions').update(dbPayload).eq('id', cleanId).select();
@@ -107,7 +106,6 @@ export const storageService = {
     const { data, error } = await supabase.from('categories').select('*');
     if (error) throw new Error(error.message);
     
-    // Unir categorias do banco com as iniciais para garantir que o usuário sempre veja opções
     const dbCategories = data || [];
     const allCategories = [...INITIAL_CATEGORIES];
     
