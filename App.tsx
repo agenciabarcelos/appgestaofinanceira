@@ -100,7 +100,9 @@ const App: React.FC = () => {
 
   const addTransaction = async (data: any) => {
     if (!user?.id) return;
-    const { installmentsCount, recurrence, amount, description, ...baseData } = data;
+    // Removendo explicitamente qualquer 'id' que possa vir do formulário para garantir que o Supabase gere um novo UUID
+    const { id, installmentsCount, recurrence, amount, description, ...baseData } = data;
+    
     try {
       setLoading(true);
       if (installmentsCount > 1) {

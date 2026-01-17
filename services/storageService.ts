@@ -8,8 +8,14 @@ const SUPABASE_ANON_KEY = 'sb_publishable_uSI7YYGkD8H05sQ_Dr6PnQ_0I4Q_qew';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Export ADMIN_UID as required by AdminApproval.tsx imports
 export const ADMIN_UID = '00000000-0000-0000-0000-000000000000';
+
+// Função auxiliar para validar se uma string é um UUID válido
+const isValidUUID = (uuid: string) => {
+  const s = "" + uuid;
+  const match = s.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  return !!match;
+};
 
 export const storageService = {
   // --- AUTHENTICATION ---
@@ -55,21 +61,26 @@ export const storageService = {
     const user = await this.getCurrentUser();
     if (!user) throw new Error("Usuário não autenticado");
 
+    // Sanitização de UUIDs: Se não for um UUID válido, enviamos null para evitar erro de sintaxe no Postgres
+    const cleanId = transaction.id && isValidUUID(transaction.id) ? transaction.id : null;
+    const cleanCategoryId = transaction.categoryId && isValidUUID(transaction.categoryId) ? transaction.categoryId : null;
+    const cleanRecurrenceId = transaction.recurrenceId && isValidUUID(transaction.recurrenceId) ? transaction.recurrenceId : null;
+
     const dbPayload: any = {
       type: transaction.type,
       description: transaction.description,
       amount: transaction.amount,
       dueDate: transaction.dueDate,
-      categoryId: transaction.categoryId,
+      categoryId: cleanCategoryId, // Corrigido: null se não for UUID
       status: transaction.status,
-      recurrenceId: transaction.recurrenceId || null,
+      recurrenceId: cleanRecurrenceId, // Corrigido: null se não for UUID
       installment: transaction.installment || null,
       totalInstallments: transaction.totalInstallments || null,
       user_id: user.id
     };
 
-    if (transaction.id && transaction.id.trim() !== "") {
-      const { data, error } = await supabase.from('transactions').update(dbPayload).eq('id', transaction.id).select();
+    if (cleanId) {
+      const { data, error } = await supabase.from('transactions').update(dbPayload).eq('id', cleanId).select();
       if (error) throw new Error(error.message);
       return data[0];
     } else {
@@ -80,11 +91,13 @@ export const storageService = {
   },
 
   async deleteTransaction(id: string) {
+    if (!isValidUUID(id)) return;
     const { error } = await supabase.from('transactions').delete().eq('id', id);
     if (error) throw new Error(error.message);
   },
 
   async deleteTransactionsByRecurrence(recurrenceId: string) {
+    if (!isValidUUID(recurrenceId)) return;
     const { error } = await supabase.from('transactions').delete().eq('recurrenceId', recurrenceId);
     if (error) throw new Error(error.message);
   },
@@ -93,7 +106,18 @@ export const storageService = {
   async getCategories(): Promise<Category[]> {
     const { data, error } = await supabase.from('categories').select('*');
     if (error) throw new Error(error.message);
-    return (data && data.length > 0) ? (data as Category[]) : INITIAL_CATEGORIES;
+    
+    // Unir categorias do banco com as iniciais para garantir que o usuário sempre veja opções
+    const dbCategories = data || [];
+    const allCategories = [...INITIAL_CATEGORIES];
+    
+    dbCategories.forEach((dbCat: any) => {
+      if (!allCategories.find(c => c.id === dbCat.id)) {
+        allCategories.push(dbCat);
+      }
+    });
+
+    return allCategories;
   },
 
   async saveCategory(category: any) {
@@ -110,8 +134,10 @@ export const storageService = {
       dbPayload.type = category.type;
     }
 
-    if (category.id && category.id.trim() !== "" && !category.id.startsWith('exp-') && !category.id.startsWith('inc-')) {
-      const { data, error } = await supabase.from('categories').update(dbPayload).eq('id', category.id).select();
+    const cleanId = category.id && isValidUUID(category.id) ? category.id : null;
+
+    if (cleanId) {
+      const { data, error } = await supabase.from('categories').update(dbPayload).eq('id', cleanId).select();
       if (error) throw new Error(error.message);
       return data ? data[0] : null;
     } else {
@@ -122,12 +148,11 @@ export const storageService = {
   },
 
   async deleteCategory(id: string) {
+    if (!isValidUUID(id)) return;
     const { error } = await supabase.from('categories').delete().eq('id', id);
     if (error) throw new Error(error.message);
   },
 
-  // --- ADMIN APPROVAL ---
-  // Added missing method to fetch all access requests for AdminApproval.tsx
   async getAllAccessRequests() {
     const { data, error } = await supabase
       .from('access_requests')
@@ -137,7 +162,6 @@ export const storageService = {
     return data || [];
   },
 
-  // Added missing method to update user approval status for AdminApproval.tsx
   async updateApproval(email: string, approved: boolean) {
     const { error } = await supabase
       .from('access_requests')
