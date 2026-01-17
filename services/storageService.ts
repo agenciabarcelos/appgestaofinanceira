@@ -10,11 +10,9 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export const ADMIN_UID = '00000000-0000-0000-0000-000000000000';
 
-// Função auxiliar para validar se uma string é um UUID válido
-const isValidUUID = (uuid: string) => {
-  if (!uuid) return false;
-  const s = "" + uuid;
-  const match = s.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+const isValidUUID = (uuid: any) => {
+  if (!uuid || typeof uuid !== 'string') return false;
+  const match = uuid.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
   return !!match;
 };
 
@@ -62,11 +60,10 @@ export const storageService = {
     const user = await this.getCurrentUser();
     if (!user) throw new Error("Usuário não autenticado");
 
-    // Agora enviamos o categoryId se for um UUID válido (incluindo os novos constantes)
     const dbPayload: any = {
       type: transaction.type,
       description: transaction.description,
-      amount: transaction.amount,
+      amount: parseFloat(transaction.amount) || 0,
       dueDate: transaction.dueDate,
       categoryId: isValidUUID(transaction.categoryId) ? transaction.categoryId : null,
       status: transaction.status,
@@ -103,7 +100,14 @@ export const storageService = {
 
   // --- CATEGORIES ---
   async getCategories(): Promise<Category[]> {
-    const { data, error } = await supabase.from('categories').select('*');
+    const user = await this.getCurrentUser();
+    if (!user) return INITIAL_CATEGORIES;
+
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('user_id', user.id);
+      
     if (error) throw new Error(error.message);
     
     const dbCategories = data || [];
@@ -125,13 +129,10 @@ export const storageService = {
     const dbPayload: any = {
       name: category.name,
       icon: category.icon || 'Tag',
+      type: category.type || TransactionType.PAYABLE,
       user_id: user.id
     };
     
-    if (category.type) {
-      dbPayload.type = category.type;
-    }
-
     const cleanId = category.id && isValidUUID(category.id) ? category.id : null;
 
     if (cleanId) {
