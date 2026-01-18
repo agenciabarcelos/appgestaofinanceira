@@ -7,7 +7,7 @@ import Transactions from './components/Transactions';
 import Categories from './components/Categories';
 import Reports from './components/Reports';
 import Profile from './components/Profile';
-import { LayoutDashboard, ReceiptText, Tags, BarChart3, LogOut, ShieldCheck, Loader2, User as UserIcon, UserPlus } from 'lucide-react';
+import { LayoutDashboard, ReceiptText, Tags, BarChart3, LogOut, ShieldCheck, Loader2, User as UserIcon } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TRANSACTIONS' | 'CATEGORIES' | 'REPORTS'>('DASHBOARD');
@@ -18,10 +18,8 @@ const App: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   
-  const [isRegistering, setIsRegistering] = useState(false);
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
   const [authError, setAuthError] = useState('');
-  const [authSuccess, setAuthSuccess] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
@@ -29,26 +27,14 @@ const App: React.FC = () => {
     checkSession();
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        // Ao logar, verificamos se o usuário está de fato aprovado no banco de dados local
-        const { data: approval } = await supabase
-          .from('access_requests')
-          .select('approved')
-          .eq('email', session.user.email)
-          .single();
-
-        if (approval?.approved) {
-          setUser({
-            id: session.user.id,
-            name: session.user.user_metadata.name || session.user.email?.split('@')[0],
-            email: session.user.email!,
-            isLoggedIn: true
-          });
-          fetchData(session.user.id);
-        } else if (event === 'SIGNED_IN') {
-          // Se não estiver aprovado, força logout
-          await storageService.signOut();
-          setAuthError("Seu acesso ainda não foi aprovado pelo administrador.");
-        }
+        // Agora aceitamos qualquer usuário logado com sucesso no Supabase Auth
+        setUser({
+          id: session.user.id,
+          name: session.user.user_metadata.name || session.user.email?.split('@')[0],
+          email: session.user.email!,
+          isLoggedIn: true
+        });
+        fetchData(session.user.id);
       } else {
         setUser(null);
         setLoading(false);
@@ -61,24 +47,13 @@ const App: React.FC = () => {
     try {
       const sbUser = await storageService.getCurrentUser();
       if (sbUser) {
-        // Verifica aprovação
-        const { data: approval } = await supabase
-          .from('access_requests')
-          .select('approved')
-          .eq('email', sbUser.email)
-          .single();
-
-        if (approval?.approved) {
-          setUser({
-            id: sbUser.id,
-            name: sbUser.user_metadata.name || sbUser.email?.split('@')[0],
-            email: sbUser.email!,
-            isLoggedIn: true
-          });
-          await fetchData(sbUser.id);
-        } else {
-          await storageService.signOut();
-        }
+        setUser({
+          id: sbUser.id,
+          name: sbUser.user_metadata.name || sbUser.email?.split('@')[0],
+          email: sbUser.email!,
+          isLoggedIn: true
+        });
+        await fetchData(sbUser.id);
       }
     } catch (e: any) {
       console.error(e.message || "Erro na sessão");
@@ -106,16 +81,9 @@ const App: React.FC = () => {
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
-    setAuthSuccess('');
     setAuthLoading(true);
     try {
-      if (isRegistering) {
-        await storageService.signUp(authForm.email, authForm.password, authForm.name);
-        setAuthSuccess('Solicitação enviada! Aguarde a aprovação do administrador para logar.');
-        setIsRegistering(false);
-      } else {
-        await storageService.signIn(authForm.email, authForm.password);
-      }
+      await storageService.signIn(authForm.email, authForm.password);
     } catch (err: any) {
       setAuthError(err.message || 'Falha na autenticação.');
     } finally {
@@ -193,7 +161,6 @@ const App: React.FC = () => {
   const updateTransaction = async (id: string, data: any) => {
     if (!user?.id) return;
     try {
-      // Importante: Passamos o ID para que o storageService saiba que é um UPDATE
       await storageService.saveTransaction({ ...data, id });
       await fetchData(user.id);
     } catch (e: any) {
@@ -246,17 +213,14 @@ const App: React.FC = () => {
         <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-10 rounded-[2.5rem] shadow-2xl w-full max-w-[420px] relative z-10">
           <div className="text-center mb-8">
             <div className="inline-flex p-4 bg-blue-600 rounded-2xl shadow-xl mb-5">
-              {isRegistering ? <UserPlus size={32} className="text-white" /> : <ShieldCheck size={32} className="text-white" />}
+              <ShieldCheck size={32} className="text-white" />
             </div>
             <h1 className="text-2xl font-black text-white uppercase tracking-tight">Gestão Financeira</h1>
             <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">
-              {isRegistering ? 'Solicitar Novo Acesso' : 'Acesso ao Sistema'}
+              Acesso ao Sistema
             </p>
           </div>
           <form onSubmit={handleAuth} className="space-y-4">
-            {isRegistering && (
-              <input required type="text" placeholder="Nome Completo" className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-500" value={authForm.name} onChange={e => setAuthForm({...authForm, name: e.target.value})} />
-            )}
             <input required type="email" placeholder="E-mail" className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-500" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} />
             <input required type="password" placeholder="Senha" className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-500" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} />
             
@@ -265,25 +229,11 @@ const App: React.FC = () => {
                 {authError}
               </div>
             )}
-            {authSuccess && (
-              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-[11px] font-bold text-center uppercase leading-relaxed">
-                {authSuccess}
-              </div>
-            )}
 
             <button type="submit" disabled={authLoading} className="w-full py-4 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition-all uppercase tracking-widest text-xs flex items-center justify-center shadow-lg shadow-blue-600/20 active:scale-95 disabled:opacity-50">
-              {authLoading ? <Loader2 className="animate-spin" size={20} /> : (isRegistering ? 'Solicitar Acesso' : 'Entrar')}
+              {authLoading ? <Loader2 className="animate-spin" size={20} /> : 'Entrar'}
             </button>
           </form>
-
-          <div className="mt-6 text-center">
-            <button 
-              onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); setAuthSuccess(''); }}
-              className="text-slate-400 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors"
-            >
-              {isRegistering ? 'Já tenho conta? Fazer Login' : 'Não tem acesso? Solicitar Agora'}
-            </button>
-          </div>
         </div>
       </div>
     );

@@ -19,38 +19,10 @@ const isValidUUID = (uuid: any) => {
 export const storageService = {
   // --- AUTHENTICATION ---
   async signIn(email: string, password: string) {
-    // 1. Verifica se está aprovado antes de prosseguir
-    const { data: approval, error: appError } = await supabase
-      .from('access_requests')
-      .select('approved')
-      .eq('email', email)
-      .single();
-
-    if (appError || !approval?.approved) {
-      throw new Error("Seu acesso ainda não foi aprovado pelo administrador.");
-    }
-
+    // Remoção da restrição de aprovação prévia. 
+    // Qualquer usuário cadastrado no Auth agora pode entrar.
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
-    return data.user;
-  },
-
-  async signUp(email: string, password: string, name: string) {
-    // 1. Cria o usuário no Auth
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { name } }
-    });
-    if (error) throw new Error(error.message);
-
-    // 2. Cria a solicitação de acesso
-    const { error: reqError } = await supabase
-      .from('access_requests')
-      .insert([{ email, name, approved: false }]);
-    
-    if (reqError) console.error("Erro ao registrar solicitação:", reqError);
-    
     return data.user;
   },
 
@@ -63,7 +35,6 @@ export const storageService = {
     return user;
   },
 
-  // Fix: Added updateUserProfile to allow updating name and password via Supabase Auth
   async updateUserProfile(name: string, password?: string) {
     const updateData: any = { data: { name } };
     if (password) {
