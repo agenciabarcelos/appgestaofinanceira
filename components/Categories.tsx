@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Category, Transaction, TransactionType } from '../types';
-import { Plus, Trash2, Edit2, Tag, PieChart, Info } from 'lucide-react';
+import { Plus, Trash2, Edit2, Tag, PieChart, Info, Eraser, Loader2 } from 'lucide-react';
 import { Icon } from './ui/Icons';
 
 interface CategoriesProps {
@@ -16,6 +16,7 @@ const Categories: React.FC<CategoriesProps> = ({ categories, transactions, onAdd
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', type: TransactionType.PAYABLE });
+  const [isCleaning, setIsCleaning] = useState(false);
 
   const categoryStats = useMemo(() => {
     const stats: Record<string, { count: number; total: number }> = {};
@@ -31,6 +32,13 @@ const Categories: React.FC<CategoriesProps> = ({ categories, transactions, onAdd
     return stats;
   }, [transactions]);
 
+  const emptyCategories = useMemo(() => {
+    return categories.filter(cat => {
+      const stat = categoryStats[cat.id] || { count: 0 };
+      return stat.count === 0;
+    });
+  }, [categories, categoryStats]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
@@ -41,6 +49,32 @@ const Categories: React.FC<CategoriesProps> = ({ categories, transactions, onAdd
     setFormData({ name: '', type: TransactionType.PAYABLE });
     setEditingId(null);
     setShowModal(false);
+  };
+
+  const handleCleanup = async () => {
+    if (emptyCategories.length === 0) {
+      alert("Nenhuma categoria vazia encontrada para remoção.");
+      return;
+    }
+
+    const confirm = window.confirm(
+      `Existem ${emptyCategories.length} categorias sem nenhum lançamento vinculado. Deseja removê-las permanentemente do banco de dados?`
+    );
+
+    if (confirm) {
+      setIsCleaning(true);
+      try {
+        // Removemos uma a uma para garantir a integridade das chamadas de API
+        for (const cat of emptyCategories) {
+          await onDelete(cat.id);
+        }
+        alert("Limpeza concluída com sucesso!");
+      } catch (error) {
+        console.error("Erro durante a limpeza:", error);
+      } finally {
+        setIsCleaning(false);
+      }
+    }
   };
 
   const openModal = (cat?: Category) => {
@@ -118,13 +152,24 @@ const Categories: React.FC<CategoriesProps> = ({ categories, transactions, onAdd
             <h2 className="text-2xl font-black tracking-tight mb-2">Estrutura de Categorias</h2>
             <p className="text-blue-100 text-sm font-medium max-w-md">Gerencie como seu dinheiro é classificado. Acompanhe os totais por categoria baseados em todos os seus lançamentos.</p>
           </div>
-          <button 
-            onClick={() => openModal()}
-            className="flex items-center justify-center gap-2 bg-white text-blue-600 px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl active:scale-95"
-          >
-            <Plus size={18} />
-            Nova Categoria
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button 
+              onClick={handleCleanup}
+              disabled={isCleaning || emptyCategories.length === 0}
+              className="flex items-center justify-center gap-2 bg-blue-500/30 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-500/50 transition-all border border-blue-400/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Remover categorias sem lançamentos"
+            >
+              {isCleaning ? <Loader2 size={18} className="animate-spin" /> : <Eraser size={18} />}
+              Limpar Vazias ({emptyCategories.length})
+            </button>
+            <button 
+              onClick={() => openModal()}
+              className="flex items-center justify-center gap-2 bg-white text-blue-600 px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-50 transition-all shadow-xl active:scale-95"
+            >
+              <Plus size={18} />
+              Nova Categoria
+            </button>
+          </div>
         </div>
       </div>
 
