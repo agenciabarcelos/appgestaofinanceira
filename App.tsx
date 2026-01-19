@@ -27,7 +27,6 @@ const App: React.FC = () => {
     checkSession();
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        // Agora aceitamos qualquer usuário logado com sucesso no Supabase Auth
         setUser({
           id: session.user.id,
           name: session.user.user_metadata.name || session.user.email?.split('@')[0],
@@ -105,8 +104,10 @@ const App: React.FC = () => {
     
     try {
       setLoading(true);
+      const numericAmount = Number(amount);
+
       if (installmentsCount > 1) {
-        const amountPerParcel = amount / installmentsCount;
+        const amountPerParcel = Number((numericAmount / installmentsCount).toFixed(2));
         const baseId = crypto.randomUUID();
         const startDate = new Date(data.dueDate);
         const promises = [];
@@ -139,7 +140,7 @@ const App: React.FC = () => {
           promises.push(storageService.saveTransaction({
             ...baseData,
             description: description,
-            amount: amount, 
+            amount: numericAmount, 
             dueDate: d.toISOString().split('T')[0],
             recurrenceId: baseId, 
             installment: i + 1, 
@@ -148,7 +149,7 @@ const App: React.FC = () => {
         }
         await Promise.all(promises);
       } else {
-        await storageService.saveTransaction({ ...baseData, description, amount });
+        await storageService.saveTransaction({ ...baseData, description, amount: numericAmount });
       }
       await fetchData(user.id);
     } catch (e: any) {
@@ -161,16 +162,25 @@ const App: React.FC = () => {
   const updateTransaction = async (id: string, data: any) => {
     if (!user?.id) return;
     try {
-      await storageService.saveTransaction({ ...data, id });
-      await fetchData(user.id);
+      // Importante: Localizar a transação existente para não perder campos em atualizações parciais
+      const existing = transactions.find(t => t.id === id);
+      if (!existing) return;
+
+      const mergedData = { ...existing, ...data };
+      
+      await storageService.saveTransaction(mergedData);
+      // Atualização otimista local para melhor performance visual
+      setTransactions(prev => prev.map(t => t.id === id ? { ...t, ...data } as Transaction : t));
     } catch (e: any) {
       alert("Erro ao atualizar: " + (e.message || e));
+      await fetchData(user.id); // Re-sincroniza em caso de erro
     }
   };
 
   const deleteTransaction = async (id: string, deleteAllRecurrence?: boolean) => {
     if (!user?.id) return;
     try {
+      setLoading(true);
       if (deleteAllRecurrence) {
         const t = transactions.find(x => x.id === id);
         if (t?.recurrenceId) {
@@ -182,6 +192,8 @@ const App: React.FC = () => {
       await fetchData(user.id);
     } catch (e: any) {
       alert("Erro ao excluir: " + (e.message || e));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -205,7 +217,6 @@ const App: React.FC = () => {
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 relative overflow-hidden">
-        {/* Background blobs */}
         <div className="absolute top-0 -left-4 w-72 h-72 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
         <div className="absolute top-0 -right-4 w-72 h-72 bg-purple-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
         <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>

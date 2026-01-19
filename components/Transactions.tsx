@@ -35,7 +35,7 @@ const Transactions: React.FC<TransactionsProps> = ({
   const [formData, setFormData] = useState({
     type: TransactionType.PAYABLE,
     description: '',
-    amount: '' as any, // Alterado para string para melhor UX no input
+    amount: '' as any,
     dueDate: new Date().toISOString().split('T')[0],
     categoryId: '',
     recurrence: RecurrenceType.NONE,
@@ -44,7 +44,6 @@ const Transactions: React.FC<TransactionsProps> = ({
   });
 
   useEffect(() => {
-    // Garante categoria correta ao mudar tipo (Payable/Receivable)
     const currentCategory = categories.find(c => c.id === formData.categoryId);
     if (!currentCategory || currentCategory.type !== formData.type) {
       const firstValid = categories.find(c => c.type === formData.type);
@@ -73,10 +72,18 @@ const Transactions: React.FC<TransactionsProps> = ({
       return;
     }
 
-    // Parse final do valor antes de enviar
+    // Conversão segura do valor
+    const amountRaw = String(formData.amount).replace(',', '.');
+    const numericAmount = parseFloat(amountRaw);
+
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      alert("Por favor, insira um valor válido.");
+      return;
+    }
+
     const finalData = {
       ...formData,
-      amount: typeof formData.amount === 'string' ? parseFloat(formData.amount.replace(',', '.')) : formData.amount
+      amount: numericAmount
     };
 
     if (editingId) {
@@ -272,7 +279,6 @@ const Transactions: React.FC<TransactionsProps> = ({
         </div>
       </div>
 
-      {/* MODAL DE ADIÇÃO/EDIÇÃO */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in duration-300">
@@ -314,7 +320,7 @@ const Transactions: React.FC<TransactionsProps> = ({
 
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Valor (R$)</label>
-                  <input required type="number" step="0.01" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-800 text-lg" placeholder="0,00" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
+                  <input required type="number" step="0.01" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-800 text-lg" placeholder="0.00" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
                 </div>
 
                 <div>
@@ -394,7 +400,6 @@ const Transactions: React.FC<TransactionsProps> = ({
         </div>
       )}
 
-      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE RECORRÊNCIA */}
       {deletingTransaction && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white rounded-[2rem] p-8 max-w-sm w-full shadow-2xl animate-in zoom-in duration-200">

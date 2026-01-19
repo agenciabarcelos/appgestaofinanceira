@@ -59,18 +59,24 @@ export const storageService = {
     const user = await this.getCurrentUser();
     if (!user) throw new Error("Usuário não autenticado");
 
-    const numericAmount = typeof transaction.amount === 'string' 
-      ? parseFloat(transaction.amount.replace(',', '.')) 
-      : transaction.amount;
+    // Normalização final do valor
+    let numericAmount = 0;
+    if (typeof transaction.amount === 'string') {
+      numericAmount = parseFloat(transaction.amount.replace(',', '.'));
+    } else {
+      numericAmount = Number(transaction.amount);
+    }
 
-    // Se o categoryId não for um UUID válido ou não for fornecido, enviamos null
-    // O banco de dados aceita null se a categoria for opcional ou removida
+    if (isNaN(numericAmount)) {
+      numericAmount = 0;
+    }
+
     const categoryId = isValidUUID(transaction.categoryId) ? transaction.categoryId : null;
 
     const dbPayload: any = {
       type: transaction.type,
       description: transaction.description,
-      amount: isNaN(numericAmount) ? 0 : numericAmount,
+      amount: numericAmount,
       dueDate: transaction.dueDate,
       categoryId: categoryId,
       status: transaction.status,
@@ -117,7 +123,6 @@ export const storageService = {
     const user = await this.getCurrentUser();
     if (!user) return INITIAL_CATEGORIES;
 
-    // 1. Busca categorias do banco
     const { data, error } = await supabase
       .from('categories')
       .select('*')
@@ -125,10 +130,9 @@ export const storageService = {
       
     if (error) throw new Error(error.message);
     
-    // 2. Se o usuário não tiver NENHUMA categoria no banco, vamos semear (seed) as iniciais
     if (!data || data.length === 0) {
       const seedData = INITIAL_CATEGORIES.map(cat => ({
-        id: cat.id, // Mantemos os IDs estáticos para compatibilidade
+        id: cat.id, 
         name: cat.name,
         type: cat.type,
         icon: cat.icon,
