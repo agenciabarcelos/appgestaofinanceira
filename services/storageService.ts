@@ -19,8 +19,6 @@ const isValidUUID = (uuid: any) => {
 export const storageService = {
   // --- AUTHENTICATION ---
   async signIn(email: string, password: string) {
-    // Remoção da restrição de aprovação prévia. 
-    // Qualquer usuário cadastrado no Auth agora pode entrar.
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
     return data.user;
@@ -61,17 +59,20 @@ export const storageService = {
     const user = await this.getCurrentUser();
     if (!user) throw new Error("Usuário não autenticado");
 
-    // Garantia absoluta de valor numérico
     const numericAmount = typeof transaction.amount === 'string' 
       ? parseFloat(transaction.amount.replace(',', '.')) 
       : transaction.amount;
+
+    // Se o categoryId não for um UUID válido ou não for fornecido, enviamos null
+    // O banco de dados aceita null se a categoria for opcional ou removida
+    const categoryId = isValidUUID(transaction.categoryId) ? transaction.categoryId : null;
 
     const dbPayload: any = {
       type: transaction.type,
       description: transaction.description,
       amount: isNaN(numericAmount) ? 0 : numericAmount,
       dueDate: transaction.dueDate,
-      categoryId: isValidUUID(transaction.categoryId) ? transaction.categoryId : null,
+      categoryId: categoryId,
       status: transaction.status,
       recurrenceId: isValidUUID(transaction.recurrenceId) ? transaction.recurrenceId : null,
       installment: transaction.installment || null,
@@ -81,14 +82,21 @@ export const storageService = {
 
     const cleanId = transaction.id && isValidUUID(transaction.id) ? transaction.id : null;
 
-    if (cleanId) {
-      const { data, error } = await supabase.from('transactions').update(dbPayload).eq('id', cleanId).select();
-      if (error) throw new Error(error.message);
-      return data[0];
-    } else {
-      const { data, error } = await supabase.from('transactions').insert(dbPayload).select();
-      if (error) throw new Error(error.message);
-      return data[0];
+    try {
+      if (cleanId) {
+        const { data, error } = await supabase.from('transactions').update(dbPayload).eq('id', cleanId).select();
+        if (error) throw new Error(error.message);
+        return data[0];
+      } else {
+        const { data, error } = await supabase.from('transactions').insert(dbPayload).select();
+        if (error) throw new Error(error.message);
+        return data[0];
+      }
+    } catch (err: any) {
+      if (err.message?.includes('transactions_categoryId_fkey')) {
+        throw new Error("A categoria selecionada não existe no banco de dados. Tente recarregar a página.");
+      }
+      throw err;
     }
   },
 
@@ -109,6 +117,7 @@ export const storageService = {
     const user = await this.getCurrentUser();
     if (!user) return INITIAL_CATEGORIES;
 
+    // 1. Busca categorias do banco
     const { data, error } = await supabase
       .from('categories')
       .select('*')
@@ -116,16 +125,29 @@ export const storageService = {
       
     if (error) throw new Error(error.message);
     
-    const dbCategories = data || [];
-    const allCategories = [...INITIAL_CATEGORIES];
-    
-    dbCategories.forEach((dbCat: any) => {
-      if (!allCategories.find(c => c.id === dbCat.id)) {
-        allCategories.push(dbCat);
-      }
-    });
+    // 2. Se o usuário não tiver NENHUMA categoria no banco, vamos semear (seed) as iniciais
+    if (!data || data.length === 0) {
+      const seedData = INITIAL_CATEGORIES.map(cat => ({
+        id: cat.id, // Mantemos os IDs estáticos para compatibilidade
+        name: cat.name,
+        type: cat.type,
+        icon: cat.icon,
+        user_id: user.id
+      }));
 
-    return allCategories;
+      const { data: seededData, error: seedError } = await supabase
+        .from('categories')
+        .insert(seedData)
+        .select();
+
+      if (seedError) {
+        console.error("Erro ao semear categorias:", seedError.message);
+        return INITIAL_CATEGORIES;
+      }
+      return seededData as Category[];
+    }
+
+    return data as Category[];
   },
 
   async saveCategory(category: any) {
